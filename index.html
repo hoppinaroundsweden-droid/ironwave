@@ -349,6 +349,25 @@
     color: var(--accent-strong);
     margin-top: 0.45rem;
   }
+  .meal-card.is-stall { border-color: var(--pump); border-style: dashed; }
+  .meal-card.is-stall.is-eaten { border-color: var(--accent); border-style: solid; background: var(--surface-2); }
+  .stall-badge {
+    font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--pump-ink);
+    background: var(--pump);
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+  }
+  .stall-banner {
+    background: var(--surface-2);
+    border: 1px solid var(--pump);
+    border-radius: 0.9rem;
+    padding: 0.75rem 0.9rem;
+    font-size: 0.8rem;
+    color: var(--text);
+    line-height: 1.45;
+    margin-bottom: 0.9rem;
+  }
 
   /* ---------- Body composition screen ---------- */
   .body-entry-card {
@@ -980,6 +999,30 @@
   var MACRO_TARGETS = { protein: 300, carbs: 500, fat: 110 };
   var MACRO_TARGET_KCAL = MACRO_TARGETS.protein * 4 + MACRO_TARGETS.carbs * 4 + MACRO_TARGETS.fat * 9;
 
+  /* Auto stall-breaker: if the Body tab's weekly weigh-ins show no net gain
+     over the last 2 logged weeks (see isWeightStalled below), the Nutrition
+     screen adds this shake to today's meal list right after the during-gym
+     carb shake, and bumps the day's carb/kcal targets to match — so the
+     macro bars stay honest about what "on track" means that day instead of
+     just reading as over-target. It's not part of the fixed 7-meal plan
+     (MEALS), so it never counts toward "X/7 meals logged." */
+  var STALL_MEAL = {
+    id: 'stallboost',
+    time: 'Immediately post-workout',
+    name: 'Stall Breaker — Maltodextrin Shake',
+    items: ['100g Maltodextrin', '~400ml Water'],
+    macros: { kcal: 400, protein: 0, carbs: 100, fat: 0 }
+  };
+
+  // Today's real macro targets, bumped for the stall-breaker when it's active.
+  function effectiveMacroTargets() {
+    var stalled = isWeightStalled();
+    var protein = MACRO_TARGETS.protein;
+    var carbs = MACRO_TARGETS.carbs + (stalled ? STALL_MEAL.macros.carbs : 0);
+    var fat = MACRO_TARGETS.fat;
+    return { protein: protein, carbs: carbs, fat: fat, kcal: protein * 4 + carbs * 4 + fat * 9, stalled: stalled };
+  }
+
   /* Muscle-group mapping + weekly volume landmarks. Every target below is the
      actual number of sets programmed in PROGRAM for that muscle, same
      convention throughout: Machine Shoulder Press is counted as Front Delts
@@ -1126,7 +1169,6 @@
         dayId: dayId,
         complete: false,
         sleepEnergy: '',
-        bodyweight: '',
         ex: {}
       };
     }
@@ -1193,6 +1235,18 @@
       prevWeek: logged[1] || null,
       prevEntry: logged[1] ? db.bodyLog[logged[1]] : null
     };
+  }
+
+  // "No gain for 2 weeks": your latest weigh-in vs. the one from 2 logged
+  // weeks before it, skipping any week you didn't weigh in so a missed week
+  // doesn't throw this off. Needs at least 3 weigh-ins logged before it can
+  // trigger at all.
+  function isWeightStalled() {
+    var withWeight = bodyLogSorted().filter(function (w) { return !!db.bodyLog[w].weight; });
+    if (withWeight.length < 3) return false;
+    var current = parseFloat(db.bodyLog[withWeight[0]].weight);
+    var twoBack = parseFloat(db.bodyLog[withWeight[2]].weight);
+    return current <= twoBack;
   }
 
   // HTML version, optionally showing growth vs a previous entry (e.g. week 3 vs
@@ -1325,7 +1379,7 @@
       .map(function (k) { return db.sessions[k]; })
       .filter(function (s) { return s.date >= cutoffISO && s.date <= today; })
       .filter(function (s) {
-        var any = s.sleepEnergy || s.bodyweight || s.complete;
+        var any = s.sleepEnergy || s.complete;
         if (any) return true;
         return Object.keys(s.ex).some(function (n) {
           var log = s.ex[n];
@@ -1581,8 +1635,6 @@
     html += '<div class="daylog-card">' +
       '<div class="daylog-field full"><label for="f-sleep">Sleep & energy</label>' +
       '<input id="f-sleep" type="text" placeholder="e.g. slept fine, decent energy" value="' + esc(session.sleepEnergy) + '"></div>' +
-      '<div class="daylog-field"><label for="f-bw">Bodyweight</label>' +
-      '<input id="f-bw" type="number" inputmode="decimal" placeholder="optional" value="' + esc(session.bodyweight) + '"></div>' +
       '</div>';
 
     var mesoInfo = getMesoInfo(dateISO);
@@ -1679,9 +1731,6 @@
 
     document.getElementById('f-sleep').addEventListener('input', function (e) {
       session.sleepEnergy = e.target.value; save();
-    });
-    document.getElementById('f-bw').addEventListener('input', function (e) {
-      session.bodyweight = e.target.value; save();
     });
 
     content.querySelectorAll('input[data-ex]').forEach(function (inp) {
@@ -1825,7 +1874,6 @@
       var day = DAY_BY_ID[s.dayId];
       lines.push('== ' + day.weekday + ' ' + dateLabel(s.date) + ' — ' + day.title + ' (' + day.tag + ')' + (s.complete ? ' [complete]' : ' [in progress]') + ' ==');
       if (s.sleepEnergy) lines.push('Sleep/energy: ' + s.sleepEnergy);
-      if (s.bodyweight) lines.push('Bodyweight: ' + s.bodyweight);
       day.ex.forEach(function (row) {
         var name = row[0];
         var log = s.ex[name];
@@ -1858,6 +1906,7 @@
         var summaryStr = totals.kcal
           ? (Math.round(totals.kcal) + ' kcal, ' + Math.round(totals.protein) + 'g protein, ' + Math.round(totals.carbs) + 'g carbs, ' + Math.round(totals.fat) + 'g fat')
           : 'no macros logged';
+        if (log.meals[STALL_MEAL.id]) summaryStr += ' [+stall-breaker shake]';
         lines.push('- ' + dateLabel(d) + ': ' + eaten + '/' + MEALS.length + ' meals — ' + summaryStr);
       });
       lines.push('');
@@ -1913,7 +1962,10 @@
      figures for their actual brands, not estimated by the app. */
   function mealAutoTotals(log) {
     var t = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
-    MEALS.forEach(function (m) {
+    // Include the stall-breaker shake in the concat regardless of whether
+    // it's stalled right now, so a day's totals stay correct even if you
+    // check it off and the stall condition happens to clear later that day.
+    MEALS.concat([STALL_MEAL]).forEach(function (m) {
       if (!log.meals[m.id]) return;
       t.kcal += m.macros.kcal; t.protein += m.macros.protein;
       t.carbs += m.macros.carbs; t.fat += m.macros.fat;
@@ -1941,14 +1993,19 @@
     var log = getNutritionLog(dateISO);
     var eatenCount = MEALS.filter(function (m) { return !!log.meals[m.id]; }).length;
     var totals = nutritionTotals(log);
+    var targets = effectiveMacroTargets();
 
-    var html = '<div class="volume-card"><div class="volume-head">Today&rsquo;s totals vs. your plan&rsquo;s macro targets</div>' +
-      macroBarHtml('Calories', totals.kcal, MACRO_TARGET_KCAL, '') +
-      macroBarHtml('Protein', totals.protein, MACRO_TARGETS.protein, 'g') +
-      macroBarHtml('Carbs', totals.carbs, MACRO_TARGETS.carbs, 'g') +
-      macroBarHtml('Fat', totals.fat, MACRO_TARGETS.fat, 'g') +
+    var html = '';
+    if (targets.stalled) {
+      html += '<div class="stall-banner"><strong>No weight gain across your last 2 weigh-ins</strong> (Body tab) — added a 100g maltodextrin shake right after tonight&rsquo;s gym carb shake, and bumped today&rsquo;s carb/calorie targets by +100g / +400 kcal to match. Check it off below once you&rsquo;ve had it.</div>';
+    }
+    html += '<div class="volume-card"><div class="volume-head">Today&rsquo;s totals vs. your plan&rsquo;s macro targets</div>' +
+      macroBarHtml('Calories', totals.kcal, targets.kcal, '') +
+      macroBarHtml('Protein', totals.protein, targets.protein, 'g') +
+      macroBarHtml('Carbs', totals.carbs, targets.carbs, 'g') +
+      macroBarHtml('Fat', totals.fat, targets.fat, 'g') +
       '</div>';
-    html += '<div class="summary-meta">These bars fill in automatically from the meals you check off below, using your own logged numbers for each — plus anything extra you add in the box beneath. The ' + MACRO_TARGET_KCAL + ' kcal target is just your macro targets run through the standard 4/4/9 kcal-per-gram conversion, not a lookup of any specific food.</div>';
+    html += '<div class="summary-meta">These bars fill in automatically from the meals you check off below, using your own logged numbers for each — plus anything extra you add in the box beneath. The ' + targets.kcal + ' kcal target is just your macro targets run through the standard 4/4/9 kcal-per-gram conversion' + (targets.stalled ? ' — including today&rsquo;s +100g stall-breaker carbs' : '') + ', not a lookup of any specific food.</div>';
 
     html += '<div class="week-heading">Extra / not in the plan</div>';
     html += '<div class="daylog-card">' +
@@ -1972,6 +2029,18 @@
         '<div class="meal-items">' + m.items.map(esc).join(' &middot; ') + '</div>' +
         '<div class="meal-macros">' + m.macros.kcal + ' kcal &middot; ' + m.macros.protein + 'g P &middot; ' + m.macros.carbs + 'g C &middot; ' + m.macros.fat + 'g F</div>' +
         '</button>';
+      // Stall-breaker slots in right after the during-gym carb shake, only
+      // on days the stall condition is active.
+      if (m.id === 'm4' && targets.stalled) {
+        var stallEaten = !!log.meals[STALL_MEAL.id];
+        html += '<button type="button" class="meal-card is-stall' + (stallEaten ? ' is-eaten' : '') + '" data-meal="' + STALL_MEAL.id + '">' +
+          '<div class="meal-row-top"><span class="stall-badge">Stall breaker</span>' +
+          '<span class="meal-check">' + (stallEaten ? '&#10003; Eaten' : 'Mark eaten') + '</span></div>' +
+          '<div class="meal-name">' + esc(STALL_MEAL.name) + '</div>' +
+          '<div class="meal-items">' + STALL_MEAL.items.map(esc).join(' &middot; ') + '</div>' +
+          '<div class="meal-macros">' + STALL_MEAL.macros.kcal + ' kcal &middot; ' + STALL_MEAL.macros.protein + 'g P &middot; ' + STALL_MEAL.macros.carbs + 'g C &middot; ' + STALL_MEAL.macros.fat + 'g F</div>' +
+          '</button>';
+      }
     });
 
     content.innerHTML = html;
