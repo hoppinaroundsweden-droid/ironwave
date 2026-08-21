@@ -368,6 +368,16 @@
     line-height: 1.45;
     margin-bottom: 0.9rem;
   }
+  .deload-alert-banner {
+    background: var(--surface-2);
+    border: 1px solid var(--failure);
+    border-radius: 0.9rem;
+    padding: 0.75rem 0.9rem;
+    font-size: 0.8rem;
+    color: var(--text);
+    line-height: 1.45;
+    margin-bottom: 0.9rem;
+  }
 
   /* ---------- Body composition screen ---------- */
   .body-entry-card {
@@ -405,6 +415,8 @@
   }
   .body-meas-delta.is-growth { color: var(--accent-strong); }
   .body-meas-delta.is-shrink { color: var(--failure); }
+  .trend-svg { display: block; margin-bottom: 1rem; }
+  .trend-svg-label { font-size: 9px; fill: var(--text-faint); font-family: var(--font-mono); }
 
   /* ---------- Workout screen ---------- */
   .session-head {
@@ -489,6 +501,7 @@
   .exercise-card.is-collapsed .exercise-target,
   .exercise-card.is-collapsed .exercise-suggestion,
   .exercise-card.is-collapsed .exercise-deload,
+  .exercise-card.is-collapsed .exercise-stall,
   .exercise-card.is-collapsed .exercise-warn,
   .exercise-card.is-collapsed .set-labels,
   .exercise-card.is-collapsed .set-rows,
@@ -542,6 +555,16 @@
     color: var(--text);
     background: var(--surface-3);
     border-left: 3px solid var(--failure);
+    border-radius: 0.4rem;
+    padding: 0.45rem 0.6rem;
+  }
+  .exercise-stall {
+    margin-top: 0.5rem;
+    font-size: 0.76rem;
+    line-height: 1.4;
+    color: var(--text);
+    background: var(--surface-3);
+    border-left: 3px solid var(--moderate);
     border-radius: 0.4rem;
     padding: 0.45rem 0.6rem;
   }
@@ -710,6 +733,27 @@
     color: var(--text-muted);
     text-align: right;
   }
+  .trend-row {
+    display: grid;
+    grid-template-columns: 5.6rem 1fr;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.32rem 0;
+  }
+  .trend-label { font-size: 0.78rem; color: var(--text); }
+  .trend-weeks { display: flex; gap: 0.35rem; justify-content: flex-end; }
+  .trend-week {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-size: 0.72rem;
+    color: var(--text-faint);
+    background: var(--surface-3);
+    border-radius: 0.4rem;
+    padding: 0.15rem 0.4rem;
+    min-width: 1.6rem;
+    text-align: center;
+  }
+  .trend-week.is-met { color: var(--accent-ink); background: var(--accent); font-weight: 700; }
   .summary-meta {
     font-size: 0.82rem; color: var(--text-muted); margin-bottom: 1rem;
   }
@@ -1089,15 +1133,26 @@
      db.sessions so it survives "Clear all data & start new cycle" — the whole
      point is to know what to start at when a mesocycle restarts. Monotonic:
      only ever raised, never lowered automatically. */
+  // Returns the new record object when this call actually improved it (so
+  // callers can pop a "New PR" toast in the moment), otherwise null.
   function maybeUpdateRecord(exName, weightStr, repsStr, dateISO) {
     var w = parseFloat(weightStr);
-    if (isNaN(w) || w <= 0) return;
+    if (isNaN(w) || w <= 0) return null;
     var r = parseInt(repsStr, 10);
     if (isNaN(r)) r = 0;
     var rec = db.records[exName];
     if (!rec || w > rec.weight || (w === rec.weight && r > (rec.reps || 0))) {
       db.records[exName] = { weight: w, reps: r, date: dateISO };
+      return db.records[exName];
     }
+    return null;
+  }
+
+  // Pops the "New PR" toast in the moment, instead of it only showing up
+  // silently on the Records tab later.
+  function maybePrToast(newRec, exName) {
+    if (!newRec) return;
+    showToast('New PR — ' + newRec.weight + 'kg x ' + (newRec.reps || 0) + ' on ' + exName);
   }
 
   function todayISO() {
@@ -1249,6 +1304,52 @@
     return current <= twoBack;
   }
 
+  /* Global version of the pain-streak check — not tied to today's specific
+     open session like exercisePainStreak, so it can run from the Home
+     screen. Looks at each exercise's own most-recent logged history and
+     counts how many sessions in a row (starting from the latest) carry the
+     same pain tag, regardless of whether today happens to be one of them. */
+  function activePainStreaks() {
+    var byExercise = {};
+    Object.keys(db.sessions).forEach(function (k) {
+      var s = db.sessions[k];
+      Object.keys(s.ex).forEach(function (name) {
+        var log = s.ex[name];
+        if (!log) return;
+        var hasData = (log.sets || []).some(function (st) { return st.w || st.r; }) || (log.painTags || []).length;
+        if (!hasData) return;
+        if (!byExercise[name]) byExercise[name] = [];
+        byExercise[name].push({ date: s.date, painTags: log.painTags || [] });
+      });
+    });
+    var results = [];
+    Object.keys(byExercise).forEach(function (name) {
+      var history = byExercise[name].sort(function (a, b) { return b.date.localeCompare(a.date); });
+      PAIN_TAGS.forEach(function (tag) {
+        var streak = 0;
+        for (var i = 0; i < history.length; i++) {
+          if (history[i].painTags.indexOf(tag) >= 0) streak++; else break;
+        }
+        if (streak >= 3) results.push({ exercise: name, tag: tag, streak: streak });
+      });
+    });
+    return results;
+  }
+
+  /* Escalates past the fixed calendar deload: fires when 2+ exercises have
+     an active pain streak, or when 1+ does alongside a weight stall — matches
+     the coach skill's "don't wait for the calendar if the body is signaling
+     sooner" rule, surfaced proactively on Home instead of only on request. */
+  function shouldSuggestEarlyDeload() {
+    var streaks = activePainStreaks();
+    var stalled = isWeightStalled();
+    return {
+      suggest: streaks.length >= 2 || (streaks.length >= 1 && stalled),
+      streaks: streaks,
+      stalled: stalled
+    };
+  }
+
   // HTML version, optionally showing growth vs a previous entry (e.g. week 3 vs
   // week 2) as "35cm→39cm +4cm" in a colored badge. Each dynamic value is escaped
   // individually before being assembled — never escape the assembled HTML itself,
@@ -1292,6 +1393,44 @@
       }
     });
     return parts.join(', ');
+  }
+
+  // Small inline-SVG sparkline of weight across your logged weeks, reusing
+  // the app's own color tokens rather than a separate chart palette. Empty
+  // string when there's fewer than 2 weighed weeks to draw a line between.
+  function bodyWeightTrendSvg() {
+    var weeks = Object.keys(db.bodyLog)
+      .map(function (k) { return parseInt(k, 10); })
+      .filter(function (w) { return db.bodyLog[w] && db.bodyLog[w].weight; })
+      .sort(function (a, b) { return a - b; });
+    if (weeks.length < 2) return '';
+
+    var pts = weeks.map(function (w) { return { week: w, weight: parseFloat(db.bodyLog[w].weight) }; });
+    var W = 320, H = 110, padX = 16, padY = 14;
+    var minW = Math.min.apply(null, pts.map(function (p) { return p.weight; }));
+    var maxW = Math.max.apply(null, pts.map(function (p) { return p.weight; }));
+    if (minW === maxW) { minW -= 1; maxW += 1; }
+    var minWeek = pts[0].week, maxWeek = pts[pts.length - 1].week;
+    var spanWeek = Math.max(1, maxWeek - minWeek);
+
+    function xFor(week) { return padX + (week - minWeek) / spanWeek * (W - padX * 2); }
+    function yFor(weight) { return H - padY - (weight - minW) / (maxW - minW) * (H - padY * 2); }
+
+    var pathD = pts.map(function (p, i) {
+      return (i === 0 ? 'M' : 'L') + xFor(p.week).toFixed(1) + ',' + yFor(p.weight).toFixed(1);
+    }).join(' ');
+    var dots = pts.map(function (p) {
+      return '<circle cx="' + xFor(p.week).toFixed(1) + '" cy="' + yFor(p.weight).toFixed(1) + '" r="3" fill="var(--accent-strong)"></circle>';
+    }).join('');
+    var firstLabel = '<text x="' + xFor(pts[0].week).toFixed(1) + '" y="' + (H + 12) + '" class="trend-svg-label" text-anchor="start">Wk' + pts[0].week + '</text>';
+    var lastLabel = '<text x="' + xFor(pts[pts.length - 1].week).toFixed(1) + '" y="' + (H + 12) + '" class="trend-svg-label" text-anchor="end">Wk' + pts[pts.length - 1].week + '</text>';
+    var maxLabel = '<text x="2" y="' + (yFor(maxW) + 3).toFixed(1) + '" class="trend-svg-label">' + maxW.toFixed(1) + 'kg</text>';
+    var minLabel = '<text x="2" y="' + (yFor(minW) + 3).toFixed(1) + '" class="trend-svg-label">' + minW.toFixed(1) + 'kg</text>';
+
+    return '<svg viewBox="0 0 ' + W + ' ' + (H + 16) + '" class="trend-svg" preserveAspectRatio="none" style="width:100%;height:auto;">' +
+      '<path d="' + pathD + '" fill="none" stroke="var(--accent-strong)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>' +
+      dots + firstLabel + lastLabel + maxLabel + minLabel +
+      '</svg>';
   }
 
   function findLastLog(exName, beforeDateISO, excludeDayId, excludeDateISO) {
@@ -1370,6 +1509,62 @@
     return streak;
   }
 
+  /* Per-exercise stall check: splits the last 2 full mesocycles (2 x 49 days)
+     into an older half and a recent half, and compares each half's best
+     (top weight, then reps at that weight) logged for this exercise. If the
+     recent half hasn't beaten the older half, that's the "stalled 2 cycles,
+     consider a variation swap" signal from the coach skill's own program-change
+     rule — surfaced live instead of only coming up if you ask in chat. Needs
+     at least 4 logged instances split across both halves before it'll flag
+     anything, so a lift you just started doesn't get flagged prematurely. */
+  function exerciseStallInfo(exName) {
+    var today = todayISO();
+    var windowStart = new Date(today + 'T00:00:00');
+    windowStart.setDate(windowStart.getDate() - 98);
+    var windowStartISO = windowStart.toISOString().slice(0, 10);
+    var mid = new Date(today + 'T00:00:00');
+    mid.setDate(mid.getDate() - 49);
+    var midISO = mid.toISOString().slice(0, 10);
+
+    var entries = [];
+    Object.keys(db.sessions).forEach(function (k) {
+      var s = db.sessions[k];
+      if (s.date < windowStartISO || s.date > today) return;
+      var log = s.ex[exName];
+      if (!log || !log.sets) return;
+      var weights = log.sets
+        .filter(function (st) { return st.w; })
+        .map(function (st) { return parseFloat(st.w); })
+        .filter(function (n) { return !isNaN(n); });
+      if (!weights.length) return;
+      var top = Math.max.apply(null, weights);
+      var topReps = 0;
+      log.sets.forEach(function (st) {
+        var w = parseFloat(st.w), r = parseInt(st.r, 10);
+        if (w === top && !isNaN(r) && r > topReps) topReps = r;
+      });
+      entries.push({ date: s.date, top: top, topReps: topReps });
+    });
+    if (entries.length < 4) return { stalled: false };
+
+    function better(a, b) {
+      if (a.top > b.top) return true;
+      if (a.top === b.top && a.topReps > b.topReps) return true;
+      return false;
+    }
+    function bestOf(list) {
+      return list.reduce(function (best, e) { return (!best || better(e, best)) ? e : best; }, null);
+    }
+
+    var older = entries.filter(function (e) { return e.date < midISO; });
+    var recent = entries.filter(function (e) { return e.date >= midISO; });
+    if (!older.length || !recent.length) return { stalled: false };
+
+    var bestOlder = bestOf(older);
+    var bestRecent = bestOf(recent);
+    return { stalled: !better(bestRecent, bestOlder), bestOlder: bestOlder, bestRecent: bestRecent };
+  }
+
   function last7Sessions() {
     var today = todayISO();
     var cutoff = new Date(today + 'T00:00:00');
@@ -1403,8 +1598,7 @@
     return { start: iso(monday), end: iso(sunday) };
   }
 
-  function weeklyVolumeByMuscle() {
-    var range = currentWeekRange(todayISO());
+  function volumeTotalsForRange(range) {
     var totals = {};
     Object.keys(VOLUME_TARGETS).forEach(function (m) { totals[m] = 0; });
     Object.keys(db.sessions).forEach(function (k) {
@@ -1418,7 +1612,25 @@
         totals[muscle] += doneSets;
       });
     });
-    return { range: range, totals: totals };
+    return totals;
+  }
+
+  function weeklyVolumeByMuscle() {
+    var range = currentWeekRange(todayISO());
+    return { range: range, totals: volumeTotalsForRange(range) };
+  }
+
+  // Oldest → newest, weeksBack entries (including the current week last).
+  function weeklyVolumeTrend(weeksBack) {
+    var today = todayISO();
+    var weeks = [];
+    for (var i = weeksBack - 1; i >= 0; i--) {
+      var d = new Date(today + 'T00:00:00');
+      d.setDate(d.getDate() - i * 7);
+      var range = currentWeekRange(d.toISOString().slice(0, 10));
+      weeks.push({ range: range, totals: volumeTotalsForRange(range) });
+    }
+    return weeks;
   }
 
   /* ================= Rendering ================= */
@@ -1520,6 +1732,18 @@
   function renderHome() {
     var info = getMesoInfo(todayISO());
     var html = renderPhaseCard(info);
+
+    if (info.started && !info.isDeload) {
+      var deloadSignal = shouldSuggestEarlyDeload();
+      if (deloadSignal.suggest) {
+        var bits = deloadSignal.streaks.map(function (s) {
+          return esc(s.tag) + ' pain flagged ' + s.streak + ' sessions straight on ' + esc(s.exercise);
+        });
+        if (deloadSignal.stalled) bits.push('bodyweight has been flat across your last 2 weigh-ins');
+        html += '<div class="deload-alert-banner"><strong>Multiple fatigue signals this week</strong> — ' +
+          bits.join('; ') + '. Worth pulling your deload forward instead of waiting for the calendar.</div>';
+      }
+    }
 
     [1, 2].forEach(function (wk) {
       var isCurrent = info.started && info.templateWeek === wk;
@@ -1667,6 +1891,12 @@
         deloadHtml = '<div class="exercise-deload">Deload week — aim for ~' + reduced + ' sets (down from ' + setCount + '), moderate effort, no dropsets.</div>';
       }
 
+      var stallInfo = exerciseStallInfo(name);
+      var stallHtml = stallInfo.stalled
+        ? '<div class="exercise-stall">Stalled ~2 cycles — best was ' + stallInfo.bestOlder.top + 'kg x ' + stallInfo.bestOlder.topReps +
+          ', still ' + stallInfo.bestRecent.top + 'kg x ' + stallInfo.bestRecent.topReps + '. Worth swapping the variation next mesocycle.</div>'
+        : '';
+
       var quickfillHtml = last ? '<button type="button" class="quickfill-btn" data-ex="' + exIdx + '">Use last time&rsquo;s numbers</button>' : '';
       var restStartHtml = '<button type="button" class="rest-start-btn" data-ex="' + exIdx + '">Start rest (' + fmtSec(restDefaultFor(day.type)) + ')</button>';
 
@@ -1697,6 +1927,7 @@
         bestHtml +
         suggestionHtml +
         deloadHtml +
+        stallHtml +
         warnHtml +
         '<div class="set-labels"><span>#</span><span>Weight</span><span>Reps</span></div>' +
         '<div class="set-rows">' +
@@ -1741,7 +1972,7 @@
         var name = day.ex[exIdx][0];
         var log = getExLog(session, name);
         log.sets[setIdx][field] = inp.value;
-        maybeUpdateRecord(name, log.sets[setIdx].w, log.sets[setIdx].r, dateISO);
+        maybePrToast(maybeUpdateRecord(name, log.sets[setIdx].w, log.sets[setIdx].r, dateISO), name);
         updateDoneChip(session, exIdx, name);
         save();
       });
@@ -1772,7 +2003,7 @@
         log.sets[setIdx][field] = String(next);
         var inp = content.querySelector('input[data-ex="' + exIdx + '"][data-set="' + setIdx + '"][data-field="' + field + '"]');
         if (inp) inp.value = next;
-        maybeUpdateRecord(name, log.sets[setIdx].w, log.sets[setIdx].r, dateISO);
+        maybePrToast(maybeUpdateRecord(name, log.sets[setIdx].w, log.sets[setIdx].r, dateISO), name);
         updateDoneChip(session, exIdx, name);
         save();
       });
@@ -2098,6 +2329,11 @@
       html += '<button class="ghost-btn" id="body-delete-btn">Delete this entry</button>';
     }
 
+    var trendSvg = bodyWeightTrendSvg();
+    if (trendSvg) {
+      html += '<div class="week-heading">Weight trend</div>' + trendSvg;
+    }
+
     html += '<div class="week-heading">History &middot; ' + sorted.length + ' of ' + BODY_TOTAL_WEEKS + ' weeks logged</div>';
     if (!sorted.length) {
       html += '<div class="empty-state">No weigh-ins logged yet. Pick a week above and fill in your numbers to start the log.</div>';
@@ -2227,9 +2463,29 @@
     return html;
   }
 
+  // 4-week compliance view so a chronic under-target pattern is visible,
+  // not just how the current single week happens to look.
+  function renderVolumeTrendHtml() {
+    var weeks = weeklyVolumeTrend(4);
+    var order = ['Chest', 'Back', 'Front Delts', 'Lateral Delts', 'Rear Delts', 'Biceps', 'Triceps', 'Traps', 'Legs', 'Abs'];
+    var html = '<div class="volume-card"><div class="volume-head">Last 4 weeks &middot; oldest &rarr; newest &middot; sets logged</div>';
+    order.forEach(function (m) {
+      var target = VOLUME_TARGETS[m];
+      html += '<div class="trend-row"><span class="trend-label">' + esc(m) + '</span><div class="trend-weeks">' +
+        weeks.map(function (w) {
+          var cur = w.totals[m] || 0;
+          return '<span class="trend-week' + (cur >= target ? ' is-met' : '') + '">' + cur + '</span>';
+        }).join('') +
+        '</div></div>';
+    });
+    html += '</div>';
+    return html;
+  }
+
   function renderSummary() {
     var text = buildSummaryText();
     var html = renderVolumeHtml();
+    html += renderVolumeTrendHtml();
     html += '<div class="summary-meta">Last 7 days, ready to paste to your coach.</div>';
     if (!text) {
       html += '<div class="empty-state">Nothing logged in the last 7 days yet.<br>Log a session from the Days tab or a meal from the Diet tab and it shows up here.</div>';
