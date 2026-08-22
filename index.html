@@ -296,6 +296,14 @@
     display: flex; align-items: center; justify-content: center;
     font-size: 0.8rem; font-weight: 700;
   }
+  .skip-mark {
+    position: absolute; top: 0.65rem; right: 0.65rem;
+    width: 1.4rem; height: 1.4rem; border-radius: 999px;
+    background: var(--surface-3); color: var(--text-faint);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700;
+  }
 
   /* ---------- Nutrition screen ---------- */
   .meal-card {
@@ -462,6 +470,77 @@
     padding: 0.9rem;
     margin-bottom: 1rem;
     display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem;
+  }
+
+  .skip-day-btn {
+    display: block; width: 100%;
+    background: none;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    font-size: 0.82rem;
+    padding: 0.6rem;
+    cursor: pointer;
+    margin-bottom: 1rem;
+  }
+  .skip-form {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.9rem;
+    padding: 0.9rem;
+    margin-bottom: 1rem;
+  }
+  .skip-form label {
+    display: block; font-size: 0.72rem; color: var(--text-muted); margin-bottom: 0.4rem;
+  }
+  .skip-form textarea {
+    width: 100%;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: 0.55rem;
+    color: var(--text);
+    padding: 0.5rem 0.6rem;
+    font-size: 0.9rem;
+    font-family: var(--font-body);
+    resize: vertical; min-height: 3rem;
+  }
+  .skip-form-actions {
+    display: flex; align-items: center; gap: 0.6rem; margin-top: 0.6rem;
+  }
+  .skip-form-actions button {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+  }
+  .skip-form-actions .cancel-link {
+    background: none; color: var(--text-faint);
+    text-decoration: underline;
+    font-weight: 500;
+  }
+  .skip-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 0.9rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+  .skip-card-label {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    margin-bottom: 0.4rem;
+  }
+  .skip-card-reason {
+    font-size: 0.85rem;
+    color: var(--text);
+    line-height: 1.5;
+    margin-bottom: 0.8rem;
   }
   .daylog-field label {
     display: block;
@@ -1250,9 +1329,15 @@
         date: dateISO,
         dayId: dayId,
         complete: false,
+        skipped: false,
+        skipReason: '',
         sleepEnergy: '',
         ex: {}
       };
+    }
+    if (db.sessions[key].skipped === undefined) {
+      db.sessions[key].skipped = false;
+      db.sessions[key].skipReason = '';
     }
     return db.sessions[key];
   }
@@ -1675,7 +1760,7 @@
       .map(function (k) { return db.sessions[k]; })
       .filter(function (s) { return s.date >= cutoffISO && s.date <= today; })
       .filter(function (s) {
-        var any = s.sleepEnergy || s.complete;
+        var any = s.sleepEnergy || s.complete || s.skipped;
         if (any) return true;
         return Object.keys(s.ex).some(function (n) {
           var log = s.ex[n];
@@ -1738,6 +1823,7 @@
   var screen = 'home';
   var activeKey = null; // for workout screen
   var mesoEditOpen = false;
+  var skipFormOpen = false;
   var collapsedEx = {}; // in-memory only, per exercise-card key ("dateISO__dayId::exIdx")
   var content = document.getElementById('content');
   var screenLabel = document.getElementById('screen-label');
@@ -1760,6 +1846,7 @@
   function setScreen(next, key) {
     screen = next;
     activeKey = key || null;
+    skipFormOpen = false;
     backBtn.style.display = next === 'workout' ? 'flex' : 'none';
     tabHome.classList.toggle('active', next === 'home');
     tabSummary.classList.toggle('active', next === 'summary');
@@ -1789,6 +1876,17 @@
     return Object.keys(db.sessions).some(function (k) {
       var s = db.sessions[k];
       return s.dayId === dayId && s.complete && s.date >= cutoffISO && s.date <= today;
+    });
+  }
+
+  function recentlySkipped(dayId) {
+    var today = todayISO();
+    var cutoff = new Date(today + 'T00:00:00');
+    cutoff.setDate(cutoff.getDate() - 6);
+    var cutoffISO = cutoff.toISOString().slice(0, 10);
+    return Object.keys(db.sessions).some(function (k) {
+      var s = db.sessions[k];
+      return s.dayId === dayId && s.skipped && s.date >= cutoffISO && s.date <= today;
     });
   }
 
@@ -1857,9 +1955,10 @@
         '<div class="day-grid' + (info.started && !isCurrent ? ' not-current' : '') + '">';
       PROGRAM.filter(function (d) { return d.week === wk; }).forEach(function (d) {
         var done = recentlyDone(d.id);
+        var skipped = !done && recentlySkipped(d.id);
         var isToday = isCurrent && d.weekday === todayWeekdayName();
         html += '<button class="day-card' + (isToday ? ' is-today' : '') + '" data-open="' + d.id + '">' +
-          (done ? '<span class="done-mark">&#10003;</span>' : '') +
+          (done ? '<span class="done-mark">&#10003;</span>' : (skipped ? '<span class="skip-mark">&ndash;</span>' : '')) +
           '<span class="weekday">' + esc(d.weekday) + (isToday ? '<span class="today-mark">&bull; Today</span>' : '') + '</span>' +
           '<span class="title">' + esc(d.title) + '</span>' +
           '<span class="' + chipClass(d.type) + '">' + esc(d.tag) + '</span>' +
@@ -1960,6 +2059,33 @@
       '<div class="title">' + esc(day.title) + '</div>' +
       '<div class="date">' + esc(day.weekday) + ' &middot; ' + esc(dateLabel(dateISO)) + '</div>' +
       '</div>';
+
+    if (session.skipped) {
+      html += '<div class="skip-card"><div class="skip-card-label">Skipped</div>' +
+        (session.skipReason ? '<div class="skip-card-reason">' + esc(session.skipReason) + '</div>' : '') +
+        '<button class="ghost-btn" id="unskip-btn" style="color:var(--text-muted);margin-top:0">Log this day instead</button></div>';
+      content.innerHTML = html;
+      document.getElementById('unskip-btn').addEventListener('click', function () {
+        session.skipped = false;
+        session.skipReason = '';
+        save();
+        renderWorkout();
+      });
+      content.scrollTop = scrollPos;
+      return;
+    }
+
+    if (skipFormOpen) {
+      html += '<div class="skip-form">' +
+        '<label for="skip-reason-input">Why are you skipping this day?</label>' +
+        '<textarea id="skip-reason-input" placeholder="e.g. on vacation, rest day, feeling sick"></textarea>' +
+        '<div class="skip-form-actions">' +
+        '<button id="skip-confirm-btn">Skip this day</button>' +
+        '<button class="cancel-link" id="skip-cancel-btn">Cancel</button>' +
+        '</div></div>';
+    } else {
+      html += '<button type="button" class="skip-day-btn" id="skip-day-btn">Skip this day</button>';
+    }
 
     html += '<div class="daylog-card">' +
       '<div class="daylog-field full"><label for="f-sleep">Sleep & energy</label>' +
@@ -2173,6 +2299,33 @@
       renderWorkout();
     });
 
+    var skipBtn = document.getElementById('skip-day-btn');
+    if (skipBtn) {
+      skipBtn.addEventListener('click', function () {
+        skipFormOpen = true;
+        renderWorkout();
+      });
+    }
+    var skipCancelBtn = document.getElementById('skip-cancel-btn');
+    if (skipCancelBtn) {
+      skipCancelBtn.addEventListener('click', function () {
+        skipFormOpen = false;
+        renderWorkout();
+      });
+    }
+    var skipConfirmBtn = document.getElementById('skip-confirm-btn');
+    if (skipConfirmBtn) {
+      skipConfirmBtn.addEventListener('click', function () {
+        var reasonInp = document.getElementById('skip-reason-input');
+        session.skipped = true;
+        session.skipReason = reasonInp ? reasonInp.value : '';
+        skipFormOpen = false;
+        save();
+        renderWorkout();
+        showToast('Day marked skipped');
+      });
+    }
+
     var clearBtn = document.getElementById('clear-btn');
     var confirming = false;
     clearBtn.addEventListener('click', function () {
@@ -2208,7 +2361,9 @@
     lines.push('');
     sessions.forEach(function (s) {
       var day = DAY_BY_ID[s.dayId];
-      lines.push('== ' + day.weekday + ' ' + dateLabel(s.date) + ' — ' + day.title + ' (' + day.tag + ')' + (s.complete ? ' [complete]' : ' [in progress]') + ' ==');
+      var statusTag = s.skipped ? ' [skipped' + (s.skipReason ? ' — ' + s.skipReason : '') + ']' : (s.complete ? ' [complete]' : ' [in progress]');
+      lines.push('== ' + day.weekday + ' ' + dateLabel(s.date) + ' — ' + day.title + ' (' + day.tag + ')' + statusTag + ' ==');
+      if (s.skipped) { lines.push(''); return; }
       if (s.sleepEnergy) lines.push('Sleep/energy: ' + s.sleepEnergy);
       day.ex.forEach(function (row) {
         var name = row[0];
@@ -2715,51 +2870,95 @@
 
   function startRest(seconds, label) {
     if (restIntervalId) { clearInterval(restIntervalId); restIntervalId = null; }
-    restState = { remaining: seconds, total: seconds, label: label, paused: false };
+    // endsAt is an absolute wall-clock target, not a countdown counter — see
+    // tickRest() for why that's what makes this survive a backgrounded tab.
+    restState = { endsAt: Date.now() + seconds * 1000, total: seconds, label: label, paused: false, pausedMs: 0, doneFired: false };
     restIntervalId = setInterval(tickRest, 1000);
     renderRestBar();
   }
 
+  // Remaining time is always re-derived from endsAt vs. the current clock,
+  // never decremented tick-by-tick. Phones throttle or fully suspend
+  // setInterval once a tab/PWA is backgrounded or the screen locks, so a
+  // counter that subtracts 1 per "tick" silently falls behind — this can't,
+  // because whenever it's actually asked to run again (even minutes late)
+  // it recomputes from real elapsed time instead of assuming ticks happened.
   function tickRest() {
     if (!restState || restState.paused) return;
-    restState.remaining--;
-    if (restState.remaining <= 0) {
-      restState.remaining = 0;
-      clearInterval(restIntervalId);
-      restIntervalId = null;
+    var remainingMs = restState.endsAt - Date.now();
+    if (remainingMs <= 0) {
+      if (restIntervalId) { clearInterval(restIntervalId); restIntervalId = null; }
+      if (!restState.doneFired) {
+        restState.doneFired = true;
+        try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) { /* vibration unsupported */ }
+        showToast('Rest done' + (restState.label ? ' — ' + restState.label : ''));
+        setTimeout(function () {
+          if (restState && restState.endsAt - Date.now() <= 0) { restState = null; renderRestBar(); }
+        }, 5000);
+      }
       renderRestBar();
-      try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) { /* vibration unsupported */ }
-      showToast('Rest done' + (restState.label ? ' — ' + restState.label : ''));
-      setTimeout(function () {
-        if (restState && restState.remaining <= 0) { restState = null; renderRestBar(); }
-      }, 5000);
       return;
     }
     renderRestBar();
   }
 
+  function restRemainingSec() {
+    if (!restState) return 0;
+    var ms = restState.paused ? restState.pausedMs : (restState.endsAt - Date.now());
+    return Math.max(0, Math.ceil(ms / 1000));
+  }
+
   function renderRestBar() {
     var bar = document.getElementById('rest-bar');
     if (!restState) { bar.hidden = true; bar.innerHTML = ''; return; }
+    var remaining = restRemainingSec();
     bar.hidden = false;
-    bar.classList.toggle('is-done', restState.remaining <= 0);
-    var timeStr = (restState.remaining <= 0) ? 'Done' : fmtSec(restState.remaining);
+    bar.classList.toggle('is-done', remaining <= 0);
+    var timeStr = (remaining <= 0) ? 'Done' : fmtSec(remaining);
     bar.innerHTML =
       '<span class="rest-time">' + timeStr + '</span>' +
       '<span class="rest-label">' + esc(restState.label || 'Resting') + '</span>' +
-      (restState.remaining > 0 ? '<button id="rest-pause-btn">' + (restState.paused ? 'Resume' : 'Pause') + '</button>' : '') +
-      (restState.remaining > 0 ? '<button id="rest-plus-btn">+30s</button>' : '') +
-      '<button id="rest-dismiss-btn">' + (restState.remaining > 0 ? 'Skip' : 'Dismiss') + '</button>';
+      (remaining > 0 ? '<button id="rest-pause-btn">' + (restState.paused ? 'Resume' : 'Pause') + '</button>' : '') +
+      (remaining > 0 ? '<button id="rest-plus-btn">+30s</button>' : '') +
+      '<button id="rest-dismiss-btn">' + (remaining > 0 ? 'Skip' : 'Dismiss') + '</button>';
     var pauseBtn = document.getElementById('rest-pause-btn');
-    if (pauseBtn) pauseBtn.addEventListener('click', function () { restState.paused = !restState.paused; renderRestBar(); });
+    if (pauseBtn) {
+      pauseBtn.addEventListener('click', function () {
+        if (restState.paused) {
+          restState.endsAt = Date.now() + restState.pausedMs;
+          restState.paused = false;
+          if (!restIntervalId) restIntervalId = setInterval(tickRest, 1000);
+        } else {
+          restState.pausedMs = Math.max(0, restState.endsAt - Date.now());
+          restState.paused = true;
+        }
+        renderRestBar();
+      });
+    }
     var plusBtn = document.getElementById('rest-plus-btn');
-    if (plusBtn) plusBtn.addEventListener('click', function () { restState.remaining += 30; restState.total += 30; renderRestBar(); });
+    if (plusBtn) {
+      plusBtn.addEventListener('click', function () {
+        if (restState.paused) restState.pausedMs += 30000; else restState.endsAt += 30000;
+        restState.total += 30;
+        renderRestBar();
+      });
+    }
     document.getElementById('rest-dismiss-btn').addEventListener('click', function () {
       if (restIntervalId) { clearInterval(restIntervalId); restIntervalId = null; }
       restState = null;
       renderRestBar();
     });
   }
+
+  // Whenever the tab/app comes back to the foreground, force an immediate
+  // resync instead of waiting for the next 1s tick — this is what makes the
+  // timer show the correct value right away rather than a stale one from
+  // before you switched away, even if the interval itself got suspended.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') tickRest();
+  });
+  window.addEventListener('focus', function () { tickRest(); });
+  window.addEventListener('pageshow', function () { tickRest(); });
 
   backBtn.addEventListener('click', function () { setScreen('home'); });
   tabHome.addEventListener('click', function () { setScreen('home'); });
