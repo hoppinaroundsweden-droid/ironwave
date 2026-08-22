@@ -418,6 +418,28 @@
   .trend-svg { display: block; margin-bottom: 1rem; }
   .trend-svg-label { font-size: 9px; fill: var(--text-faint); font-family: var(--font-mono); }
 
+  /* ---------- Bloodwork screen ---------- */
+  .blood-cat-label {
+    grid-column: 1 / -1;
+    font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--text-faint); font-weight: 700;
+    margin-top: 0.3rem;
+  }
+  .blood-cat-label:first-of-type { margin-top: 0; }
+  .blood-table-wrap { overflow-x: auto; margin-bottom: 0.5rem; }
+  .blood-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .blood-table th, .blood-table td {
+    padding: 0.45rem 0.4rem; text-align: center; border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  .blood-table th:first-child, .blood-table td:first-child { text-align: left; white-space: normal; }
+  .blood-table thead th {
+    font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-faint); font-weight: 700;
+  }
+  .blood-table td:not(:first-child) { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .blood-table td.is-empty { color: var(--text-faint); }
+  .blood-row-label { font-weight: 600; }
+  .blood-row-unit { display: block; font-size: 0.64rem; color: var(--text-faint); font-weight: 400; }
+
   /* ---------- Workout screen ---------- */
   .session-head {
     margin-bottom: 1.1rem;
@@ -909,6 +931,10 @@
     <span class="icon">&#128207;</span>
     <span class="lbl">Body</span>
   </button>
+  <button class="tab" id="tab-blood" aria-label="Bloodwork">
+    <span class="icon">&#129714;</span>
+    <span class="lbl">Blood</span>
+  </button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1113,7 +1139,7 @@
   /* ================= Storage ================= */
   var DB_KEY = 'ironwave_v1';
   var DEFAULT_MESO_START = '2026-08-31';
-  var db = { sessions: {}, mesoStart: DEFAULT_MESO_START, records: {}, nutrition: {}, bodyLog: {} };
+  var db = { sessions: {}, mesoStart: DEFAULT_MESO_START, records: {}, nutrition: {}, bodyLog: {}, bloodwork: {} };
   (function load() {
     try {
       var raw = localStorage.getItem(DB_KEY);
@@ -1123,7 +1149,8 @@
       if (!db.records) db.records = {};
       if (!db.nutrition) db.nutrition = {};
       if (!db.bodyLog) db.bodyLog = {};
-    } catch (e) { db = { sessions: {}, mesoStart: DEFAULT_MESO_START, records: {}, nutrition: {}, bodyLog: {} }; }
+      if (!db.bloodwork) db.bloodwork = {};
+    } catch (e) { db = { sessions: {}, mesoStart: DEFAULT_MESO_START, records: {}, nutrition: {}, bodyLog: {}, bloodwork: {} }; }
   })();
   function save() {
     try { localStorage.setItem(DB_KEY, JSON.stringify(db)); } catch (e) { /* storage unavailable — state stays in memory this visit */ }
@@ -1433,6 +1460,80 @@
       '</svg>';
   }
 
+  // Bloodwork log — a plain pre/during/post record for your own comparison,
+  // with a second optional "during" check for a mid-cycle draw. Deliberately
+  // not analyzed or flagged by the app: whether a marker moving up or down
+  // is good depends on the marker, and that read is left to you (or your
+  // doctor), not this tool. Curated to the markers most worth tracking
+  // around a cycle rather than a full lab panel.
+  var BLOOD_TIMEPOINTS = [
+    { key: 'pre', label: 'Pre-cycle' },
+    { key: 'during', label: 'During #1' },
+    { key: 'during2', label: 'During #2' },
+    { key: 'post', label: 'Post-cycle' }
+  ];
+  var BLOOD_MARKERS = [
+    { key: 'testosteron', label: 'Testosteron', unit: 'nmol/L', cat: 'Hormoner' },
+    { key: 'ostradiol', label: 'Östradiol', unit: 'pmol/L', cat: 'Hormoner' },
+    { key: 'totalkolesterol', label: 'Kolesterol (total)', unit: 'mmol/L', cat: 'Blodfetter' },
+    { key: 'hdl', label: 'HDL-kolesterol', unit: 'mmol/L', cat: 'Blodfetter' },
+    { key: 'ldl', label: 'LDL-kolesterol', unit: 'mmol/L', cat: 'Blodfetter' },
+    { key: 'triglycerider', label: 'Triglycerider', unit: 'mmol/L', cat: 'Blodfetter' },
+    { key: 'hemoglobin', label: 'Hemoglobin', unit: 'g/L', cat: 'Blodstatus' },
+    { key: 'hematokrit', label: 'Hematokrit (EVF)', unit: 'L/L', cat: 'Blodstatus' },
+    { key: 'erytrocyter', label: 'Erytrocyter (EPK)', unit: 'x10¹²/L', cat: 'Blodstatus' },
+    { key: 'alat', label: 'ALAT', unit: 'µkat/L', cat: 'Lever' },
+    { key: 'asat', label: 'ASAT', unit: 'µkat/L', cat: 'Lever' },
+    { key: 'kreatinin', label: 'Kreatinin', unit: 'µmol/L', cat: 'Njurar' },
+    { key: 'hscrp', label: 'Högkänsligt CRP', unit: 'mg/L', cat: 'Inflammation' },
+    { key: 'tsh', label: 'TSH', unit: 'mIE/L', cat: 'Sköldkörtel' }
+  ];
+
+  function getBloodEntry(tp) {
+    if (!db.bloodwork[tp]) {
+      db.bloodwork[tp] = {};
+      BLOOD_MARKERS.forEach(function (m) { db.bloodwork[tp][m.key] = ''; });
+    }
+    return db.bloodwork[tp];
+  }
+
+  function hasBloodData(entry) {
+    if (!entry) return false;
+    return BLOOD_MARKERS.some(function (m) { return !!entry[m.key]; });
+  }
+
+  function bloodCategories() {
+    var cats = [];
+    BLOOD_MARKERS.forEach(function (m) { if (cats.indexOf(m.cat) < 0) cats.push(m.cat); });
+    return cats;
+  }
+
+  // Side-by-side table of every marker that has at least one timepoint
+  // filled in. No color, no delta judgement — just the three raw numbers.
+  function bloodCompareTableHtml() {
+    var rows = BLOOD_MARKERS.filter(function (m) {
+      return BLOOD_TIMEPOINTS.some(function (tp) {
+        var e = db.bloodwork[tp.key];
+        return e && e[m.key];
+      });
+    });
+    if (!rows.length) return '';
+    var html = '<div class="blood-table-wrap"><table class="blood-table"><thead><tr><th>Marker</th>';
+    BLOOD_TIMEPOINTS.forEach(function (tp) { html += '<th>' + esc(tp.label) + '</th>'; });
+    html += '</tr></thead><tbody>';
+    rows.forEach(function (m) {
+      html += '<tr><td class="blood-row-label">' + esc(m.label) + '<span class="blood-row-unit">' + esc(m.unit) + '</span></td>';
+      BLOOD_TIMEPOINTS.forEach(function (tp) {
+        var e = db.bloodwork[tp.key];
+        var v = e ? e[m.key] : '';
+        html += '<td' + (v ? '' : ' class="is-empty"') + '>' + (v ? esc(v) : '&mdash;') + '</td>';
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table></div>';
+    return html;
+  }
+
   function findLastLog(exName, beforeDateISO, excludeDayId, excludeDateISO) {
     var best = null;
     Object.keys(db.sessions).forEach(function (key) {
@@ -1646,7 +1747,9 @@
   var tabRecords = document.getElementById('tab-records');
   var tabDiet = document.getElementById('tab-diet');
   var tabBody = document.getElementById('tab-body');
+  var tabBlood = document.getElementById('tab-blood');
   var bodyFormWeek = null;
+  var bloodFormTimepoint = null;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -1663,6 +1766,7 @@
     tabRecords.classList.toggle('active', next === 'records');
     tabDiet.classList.toggle('active', next === 'diet');
     tabBody.classList.toggle('active', next === 'body');
+    tabBlood.classList.toggle('active', next === 'blood');
     render();
     content.scrollTop = 0;
   }
@@ -1673,6 +1777,7 @@
     else if (screen === 'records') { screenLabel.textContent = 'Personal Records'; renderRecords(); }
     else if (screen === 'diet') { screenLabel.textContent = 'Nutrition'; renderNutrition(); }
     else if (screen === 'body') { screenLabel.textContent = 'Body Composition'; renderBody(); }
+    else if (screen === 'blood') { screenLabel.textContent = 'Bloodwork'; renderBlood(); }
     else { screenLabel.textContent = 'Weekly Summary'; renderSummary(); }
   }
 
@@ -2418,6 +2523,77 @@
     });
   }
 
+  function renderBlood() {
+    if (!bloodFormTimepoint) bloodFormTimepoint = 'pre';
+    var entry = getBloodEntry(bloodFormTimepoint);
+
+    var html = '<div class="summary-meta">Pre/during/post bloodwork, side by side for your own comparison &mdash; enter values exactly as they appear on your lab report. During #2 is there if you want a second check mid-cycle; leave it empty otherwise. This is a plain log: nothing here is flagged, scored, or interpreted, so read your results with your doctor.</div>';
+
+    html += '<div class="week-heading">Log a timepoint</div>';
+    html += '<div class="daylog-card">' +
+      '<div class="daylog-field full"><label for="blood-timepoint">Timepoint</label><select id="blood-timepoint">';
+    BLOOD_TIMEPOINTS.forEach(function (tp) {
+      var logged = hasBloodData(db.bloodwork[tp.key]);
+      html += '<option value="' + tp.key + '"' + (tp.key === bloodFormTimepoint ? ' selected' : '') + '>' +
+        esc(tp.label) + (logged ? ' — logged' : '') + '</option>';
+    });
+    html += '</select></div>';
+
+    bloodCategories().forEach(function (cat) {
+      html += '<div class="blood-cat-label">' + esc(cat) + '</div>';
+      BLOOD_MARKERS.filter(function (m) { return m.cat === cat; }).forEach(function (m) {
+        html += '<div class="daylog-field"><label for="blood-' + m.key + '">' + esc(m.label) + ' (' + esc(m.unit) + ')</label>' +
+          '<input id="blood-' + m.key + '" type="number" inputmode="decimal" step="0.01" placeholder="0" value="' + esc(entry[m.key]) + '"></div>';
+      });
+    });
+    html += '</div>';
+
+    if (hasBloodData(entry)) {
+      html += '<button class="ghost-btn" id="blood-delete-btn">Clear this timepoint</button>';
+    }
+
+    var compareHtml = bloodCompareTableHtml();
+    if (compareHtml) {
+      html += '<div class="week-heading">Compare</div>' + compareHtml;
+    }
+
+    content.innerHTML = html;
+
+    var tpSel = document.getElementById('blood-timepoint');
+    tpSel.addEventListener('change', function () {
+      bloodFormTimepoint = tpSel.value;
+      renderBlood();
+    });
+
+    BLOOD_MARKERS.forEach(function (m) {
+      var inp = document.getElementById('blood-' + m.key);
+      inp.addEventListener('change', function () {
+        var e = getBloodEntry(bloodFormTimepoint);
+        e[m.key] = inp.value;
+        save();
+        renderBlood();
+      });
+    });
+
+    var deleteBtn = document.getElementById('blood-delete-btn');
+    if (deleteBtn) {
+      var confirmingBloodDelete = false;
+      deleteBtn.addEventListener('click', function () {
+        if (!confirmingBloodDelete) {
+          confirmingBloodDelete = true;
+          deleteBtn.textContent = 'Tap again to confirm clear';
+          setTimeout(function () { confirmingBloodDelete = false; deleteBtn.textContent = 'Clear this timepoint'; }, 3000);
+          return;
+        }
+        db.bloodwork[bloodFormTimepoint] = {};
+        BLOOD_MARKERS.forEach(function (m) { db.bloodwork[bloodFormTimepoint][m.key] = ''; });
+        save();
+        confirmingBloodDelete = false;
+        renderBlood();
+      });
+    }
+  }
+
   function renderRecords() {
     var seen = {};
     var names = [];
@@ -2591,6 +2767,7 @@
   tabRecords.addEventListener('click', function () { setScreen('records'); });
   tabDiet.addEventListener('click', function () { setScreen('diet'); });
   tabBody.addEventListener('click', function () { setScreen('body'); });
+  tabBlood.addEventListener('click', function () { setScreen('blood'); });
 
   render();
 })();
