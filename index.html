@@ -1316,6 +1316,24 @@
     });
   }
 
+  // Tells the Worker "notify me if this is still pending in a minute" —
+  // fire-and-forget, since the local rest timer (startRest/tickRest above)
+  // already works correctly on its own; this only adds a background push
+  // for when the app is fully closed for the whole rest period. Silently
+  // does nothing if notifications were never enabled.
+  function pushRestSchedule(seconds, label) {
+    if (!pushSupported() || !pushSubscribed) return;
+    fetch(PUSH_CONFIG.workerUrl + '/schedule-rest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seconds: seconds, label: label || '' })
+    }).catch(function () { /* best-effort — local timer still works regardless */ });
+  }
+  function pushRestCancel() {
+    if (!pushSupported() || !pushSubscribed) return;
+    fetch(PUSH_CONFIG.workerUrl + '/cancel-rest', { method: 'POST' }).catch(function () { /* best-effort */ });
+  }
+
   /* All-time personal-best weight per exercise. Deliberately kept separate from
      db.sessions so it survives "Clear all data & start new cycle" — the whole
      point is to know what to start at when a mesocycle restarts. Monotonic:
@@ -2970,6 +2988,7 @@
     restState = { endsAt: Date.now() + seconds * 1000, total: seconds, label: label, paused: false, pausedMs: 0, doneFired: false };
     restIntervalId = setInterval(tickRest, 1000);
     renderRestBar();
+    pushRestSchedule(seconds, label);
   }
 
   // Remaining time is always re-derived from endsAt vs. the current clock,
@@ -2987,6 +3006,7 @@
         restState.doneFired = true;
         try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) { /* vibration unsupported */ }
         showToast('Rest done' + (restState.label ? ' — ' + restState.label : ''));
+        pushRestCancel(); // already handled locally — don't also let a stray background push arrive
         setTimeout(function () {
           if (restState && restState.endsAt - Date.now() <= 0) { restState = null; renderRestBar(); }
         }, 5000);
@@ -3023,9 +3043,11 @@
           restState.endsAt = Date.now() + restState.pausedMs;
           restState.paused = false;
           if (!restIntervalId) restIntervalId = setInterval(tickRest, 1000);
+          pushRestSchedule(Math.round(restState.pausedMs / 1000), restState.label);
         } else {
           restState.pausedMs = Math.max(0, restState.endsAt - Date.now());
           restState.paused = true;
+          pushRestCancel(); // don't fire a background push for time that isn't actually elapsing
         }
         renderRestBar();
       });
@@ -3033,7 +3055,12 @@
     var plusBtn = document.getElementById('rest-plus-btn');
     if (plusBtn) {
       plusBtn.addEventListener('click', function () {
-        if (restState.paused) restState.pausedMs += 30000; else restState.endsAt += 30000;
+        if (restState.paused) {
+          restState.pausedMs += 30000; // reschedule happens on Resume, not here
+        } else {
+          restState.endsAt += 30000;
+          pushRestSchedule(restRemainingSec(), restState.label);
+        }
         restState.total += 30;
         renderRestBar();
       });
@@ -3041,6 +3068,7 @@
     document.getElementById('rest-dismiss-btn').addEventListener('click', function () {
       if (restIntervalId) { clearInterval(restIntervalId); restIntervalId = null; }
       restState = null;
+      pushRestCancel();
       renderRestBar();
     });
   }
