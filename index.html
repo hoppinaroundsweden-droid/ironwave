@@ -1322,17 +1322,12 @@
   // for when the app is fully closed for the whole rest period. Silently
   // does nothing if notifications were never enabled.
   function pushRestSchedule(seconds, label) {
-    if (!pushSupported() || !pushSubscribed) { showToast('DEBUG: skipped (supported=' + pushSupported() + ' subscribed=' + pushSubscribed + ')'); return; }
-    showToast('DEBUG: calling schedule-rest…');
+    if (!pushSupported() || !pushSubscribed) return;
     fetch(PUSH_CONFIG.workerUrl + '/schedule-rest', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ seconds: seconds, label: label || '' })
-    }).then(function (res) {
-      showToast('DEBUG: schedule-rest responded ' + res.status);
-    }).catch(function (err) {
-      showToast('DEBUG: schedule-rest failed — ' + (err && err.message ? err.message : 'unknown error'));
-    });
+    }).catch(function () { /* best-effort */ });
   }
   function pushRestCancel() {
     if (!pushSupported() || !pushSubscribed) return;
