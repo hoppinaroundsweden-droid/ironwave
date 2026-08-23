@@ -1235,6 +1235,87 @@
     try { localStorage.setItem(DB_KEY, JSON.stringify(db)); } catch (e) { /* storage unavailable — state stays in memory this visit */ }
   }
 
+  /* ================= Push notifications =================
+     Real background push (meal times, pre-workout shake) needs a server to
+     actually fire the notification while the app is closed — a static page
+     can't schedule anything on its own. workerUrl points at a small
+     Cloudflare Worker that holds this device's push subscription and sends
+     it at the right clock times; see the deploy guide for how that's set
+     up. Until workerUrl is filled in, this section quietly no-ops — the
+     rest of the app works exactly the same either way. */
+  var PUSH_CONFIG = {
+    vapidPublicKey: 'BFksd5GItI3K66eKuQltKrPLt_O_spGcGO-LgpYzi8rqVwRGXkbfoW5O4vCQuOaFSnjVVIPyjDTQ7IwPsHPth1U',
+    workerUrl: 'https://ironwave-notify.hoppinaround-ironwave.workers.dev'
+  };
+
+  function pushConfigured() {
+    return PUSH_CONFIG.workerUrl.indexOf('PASTE_YOUR') === -1;
+  }
+  function pushSupported() {
+    return pushConfigured() && 'serviceWorker' in navigator && 'PushManager' in window && typeof Notification !== 'undefined';
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    var padding = '='.repeat((4 - base64String.length % 4) % 4);
+    var base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    var rawData = atob(base64);
+    var outputArray = new Uint8Array(rawData.length);
+    for (var i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+    return outputArray;
+  }
+
+  var swRegistration = null;
+  var pushSubscribed = false;
+
+  if (pushSupported()) {
+    navigator.serviceWorker.register('sw.js').then(function (reg) {
+      swRegistration = reg;
+      return reg.pushManager.getSubscription();
+    }).then(function (sub) {
+      pushSubscribed = !!sub;
+      if (screen === 'home') renderHome();
+    }).catch(function () { /* service worker unavailable this visit — Enable button will retry */ });
+  }
+
+  function enablePush() {
+    if (!swRegistration) { showToast('Still loading — try again in a moment'); return; }
+    Notification.requestPermission().then(function (perm) {
+      if (perm !== 'granted') {
+        showToast('Notification permission was not granted');
+        return;
+      }
+      swRegistration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(PUSH_CONFIG.vapidPublicKey)
+      }).then(function (sub) {
+        return fetch(PUSH_CONFIG.workerUrl + '/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(sub)
+        });
+      }).then(function () {
+        pushSubscribed = true;
+        showToast('Meal & workout notifications enabled');
+        if (screen === 'home') renderHome();
+      }).catch(function () {
+        showToast('Could not enable notifications — try again');
+      });
+    });
+  }
+
+  function disablePush() {
+    if (!swRegistration) return;
+    swRegistration.pushManager.getSubscription().then(function (sub) {
+      if (!sub) { pushSubscribed = false; if (screen === 'home') renderHome(); return; }
+      fetch(PUSH_CONFIG.workerUrl + '/unsubscribe', { method: 'POST' }).catch(function () { /* best-effort cleanup */ });
+      return sub.unsubscribe().then(function () {
+        pushSubscribed = false;
+        showToast('Notifications turned off');
+        if (screen === 'home') renderHome();
+      });
+    });
+  }
+
   /* All-time personal-best weight per exercise. Deliberately kept separate from
      db.sessions so it survives "Clear all data & start new cycle" — the whole
      point is to know what to start at when a mesocycle restarts. Monotonic:
@@ -1966,6 +2047,15 @@
       });
       html += '</div>';
     });
+    if (pushSupported()) {
+      html += '<div class="reset-block">' +
+        (pushSubscribed
+          ? '<div class="reset-hint">Meal and pre-workout notifications are on — you\'ll get a push at each scheduled time, even with the app closed.</div>' +
+            '<button class="ghost-btn" id="push-disable-btn" style="color:var(--text-muted)">Turn off notifications</button>'
+          : '<div class="reset-hint">Get a push when it\'s time for each meal or your pre-workout shake, even with the app closed.</div>' +
+            '<button class="ghost-btn" id="push-enable-btn" style="color:var(--text-muted)">Enable meal &amp; workout notifications</button>') +
+        '</div>';
+    }
     html += '<div class="reset-block">' +
       '<div class="reset-hint">Starting a fresh cycle? This wipes every logged set, note, checkmark, and diet log, and resets the mesocycle clock to today — nothing is recoverable after. Your personal-record weights (Records tab) are kept, so you still know what to start at.</div>' +
       '<button class="ghost-btn" id="reset-all-btn">Clear all data &amp; start new cycle</button>' +
@@ -2002,6 +2092,11 @@
         renderHome();
       });
     }
+
+    var pushEnableBtn = document.getElementById('push-enable-btn');
+    if (pushEnableBtn) pushEnableBtn.addEventListener('click', enablePush);
+    var pushDisableBtn = document.getElementById('push-disable-btn');
+    if (pushDisableBtn) pushDisableBtn.addEventListener('click', disablePush);
 
     var resetBtn = document.getElementById('reset-all-btn');
     var confirmingReset = false;
