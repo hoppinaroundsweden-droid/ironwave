@@ -542,6 +542,9 @@
     line-height: 1.5;
     margin-bottom: 0.8rem;
   }
+  .daylog-field label .ref-hint {
+    text-transform: none; font-weight: 400; letter-spacing: normal;
+  }
   .daylog-field label {
     display: block;
     font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em;
@@ -1656,21 +1659,64 @@
     { key: 'during2', label: 'During #2' },
     { key: 'post', label: 'Post-cycle' }
   ];
+  // Matches your lab's own panel structure and reference intervals exactly
+  // (as printed on your report), so entering a result is just transcribing.
+  // The ref range is shown as plain reference text only — never colored,
+  // scored, or flagged. Hormoner has no ref shown since your lab reports
+  // those without one; leave blank if yours doesn't give one either.
   var BLOOD_MARKERS = [
-    { key: 'testosteron', label: 'Testosteron', unit: 'nmol/L', cat: 'Hormoner' },
-    { key: 'ostradiol', label: 'Östradiol', unit: 'pmol/L', cat: 'Hormoner' },
-    { key: 'totalkolesterol', label: 'Kolesterol (total)', unit: 'mmol/L', cat: 'Blodfetter' },
-    { key: 'hdl', label: 'HDL-kolesterol', unit: 'mmol/L', cat: 'Blodfetter' },
-    { key: 'ldl', label: 'LDL-kolesterol', unit: 'mmol/L', cat: 'Blodfetter' },
-    { key: 'triglycerider', label: 'Triglycerider', unit: 'mmol/L', cat: 'Blodfetter' },
-    { key: 'hemoglobin', label: 'Hemoglobin', unit: 'g/L', cat: 'Blodstatus' },
-    { key: 'hematokrit', label: 'Hematokrit (EVF)', unit: 'L/L', cat: 'Blodstatus' },
-    { key: 'erytrocyter', label: 'Erytrocyter (EPK)', unit: 'x10¹²/L', cat: 'Blodstatus' },
-    { key: 'alat', label: 'ALAT', unit: 'µkat/L', cat: 'Lever' },
-    { key: 'asat', label: 'ASAT', unit: 'µkat/L', cat: 'Lever' },
-    { key: 'kreatinin', label: 'Kreatinin', unit: 'µmol/L', cat: 'Njurar' },
-    { key: 'hscrp', label: 'Högkänsligt CRP', unit: 'mg/L', cat: 'Inflammation' },
-    { key: 'tsh', label: 'TSH', unit: 'mIE/L', cat: 'Sköldkörtel' }
+    // Hjärt- och kärlmarkörer
+    { key: 'totalkolesterol', label: 'Kolesterol (total)', unit: 'mmol/L', ref: '2.9–6.1', cat: 'Hjärt- och kärlmarkörer' },
+    { key: 'hdl', label: 'HDL-kolesterol', unit: 'mmol/L', ref: '0.80–2.1', cat: 'Hjärt- och kärlmarkörer' },
+    { key: 'ldl', label: 'LDL-kolesterol', unit: 'mmol/L', ref: '1.2–4.3', cat: 'Hjärt- och kärlmarkörer' },
+    { key: 'nonhdl', label: 'Non-HDL kolesterol', unit: 'mmol/L', ref: '1.7–5.0', cat: 'Hjärt- och kärlmarkörer' },
+    { key: 'triglycerider', label: 'Triglycerider', unit: 'mmol/L', ref: '0.45–2.6', cat: 'Hjärt- och kärlmarkörer' },
+    // Blodstatus & B-celler
+    { key: 'erytrocyter', label: 'Erytrocyter (EPK)', unit: 'x10¹²/L', ref: '4.2–5.7', cat: 'Blodstatus & B-celler' },
+    { key: 'hematokrit', label: 'Hematokrit (EVF)', unit: 'L/L', ref: '0.39–0.50', cat: 'Blodstatus & B-celler' },
+    { key: 'hemoglobin', label: 'Hemoglobin', unit: 'g/L', ref: '134–170', cat: 'Blodstatus & B-celler' },
+    { key: 'mch', label: 'Hemoglobinmassa (MCH)', unit: 'pg', ref: '27–33', cat: 'Blodstatus & B-celler' },
+    { key: 'mcv', label: 'MCV', unit: 'fL', ref: '82–98', cat: 'Blodstatus & B-celler' },
+    { key: 'trombocyter', label: 'Trombocyter (TPK)', unit: 'x10⁹/L', ref: '145–348', cat: 'Blodstatus & B-celler' },
+    { key: 'leukocyter', label: 'Leukocyter (LPK)', unit: 'x10⁹/L', ref: '3.5–8.8', cat: 'Blodstatus & B-celler' },
+    { key: 'neutrofila', label: 'Neutrofila granulocyter', unit: 'x10⁹/L', ref: '1.7–6.8', cat: 'Blodstatus & B-celler' },
+    { key: 'lymfocyter', label: 'Lymfocyter', unit: 'x10⁹/L', ref: '0.8–4.1', cat: 'Blodstatus & B-celler' },
+    { key: 'monocyter', label: 'Monocyter', unit: 'x10⁹/L', ref: '0.1–1.0', cat: 'Blodstatus & B-celler' },
+    { key: 'eosinofila', label: 'Eosinofila granulocyter', unit: 'x10⁹/L', ref: '0.0–0.6', cat: 'Blodstatus & B-celler' },
+    { key: 'basofila', label: 'Basofila granulocyter', unit: 'x10⁹/L', ref: '0.0–0.1', cat: 'Blodstatus & B-celler' },
+    { key: 'rdw', label: 'Erc(B)-RDW', unit: '%', ref: '12.5–16.0', cat: 'Blodstatus & B-celler' },
+    { key: 'mchc', label: '(B)Erc-MCHC', unit: 'g/L', ref: '317–357', cat: 'Blodstatus & B-celler' },
+    // Järn
+    { key: 'jarn', label: 'Järn', unit: 'µmol/L', ref: '9–34', cat: 'Järn' },
+    // Blodsocker
+    { key: 'glukos', label: 'Glukos', unit: 'mmol/L', ref: '', cat: 'Blodsocker' },
+    { key: 'hba1c', label: 'HbA1c', unit: 'mmol/mol', ref: '27–42', cat: 'Blodsocker' },
+    // Vitaminer & Mineraler
+    { key: 'b12', label: 'Kobalamin (B12)', unit: 'pmol/L', ref: '140–650', cat: 'Vitaminer & Mineraler' },
+    { key: 'kalcium', label: 'Kalcium', unit: 'mmol/L', ref: '2.15–2.50', cat: 'Vitaminer & Mineraler' },
+    { key: 'fosfat', label: 'Fosfat', unit: 'mmol/L', ref: '0.70–1.60', cat: 'Vitaminer & Mineraler' },
+    // Inflammation
+    { key: 'hscrp', label: 'Högkänsligt CRP', unit: 'mg/L', ref: '<5.0', cat: 'Inflammation' },
+    // Sköldkörtel
+    { key: 't4fritt', label: 'T4 Fritt', unit: 'pmol/L', ref: '9.0–19', cat: 'Sköldkörtel' },
+    { key: 'tsh', label: 'TSH', unit: 'mIE/L', ref: '0.40–4.00', cat: 'Sköldkörtel' },
+    // Hormoner
+    { key: 'testosteron', label: 'Testosteron', unit: 'nmol/L', ref: '', cat: 'Hormoner' },
+    { key: 'ostradiol', label: 'Östradiol', unit: 'pmol/L', ref: '', cat: 'Hormoner' },
+    // Lever
+    { key: 'alat', label: 'ALAT', unit: 'µkat/L', ref: '<1.2', cat: 'Lever' },
+    { key: 'asat', label: 'ASAT', unit: 'µkat/L', ref: '<0.76', cat: 'Lever' },
+    { key: 'alp', label: 'ALP', unit: 'µkat/L', ref: '0.70–1.9', cat: 'Lever' },
+    { key: 'ggt', label: 'GT, gamma', unit: 'µkat/L', ref: '<1.4', cat: 'Lever' },
+    { key: 'albumin', label: 'Albumin', unit: 'g/L', ref: '35–50', cat: 'Lever' },
+    // Njurar
+    { key: 'kalium', label: 'Kalium', unit: 'mmol/L', ref: '3.6–5.0', cat: 'Njurar' },
+    { key: 'kreatinin', label: 'Kreatinin', unit: 'µmol/L', ref: '<100', cat: 'Njurar' },
+    { key: 'natrium', label: 'Natrium', unit: 'mmol/L', ref: '137–145', cat: 'Njurar' },
+    { key: 'egfr', label: 'Pt-eGFR(krea) relativ', unit: 'mL/min/1.73m²', ref: '>80', cat: 'Njurar' },
+    // Muskler & Leder
+    { key: 'ck', label: 'Kreatinkinas, CK', unit: 'µkat/L', ref: '0.80–6.7', cat: 'Muskler & Leder' },
+    { key: 'ldh', label: 'Laktatdehydrogenas, LDH', unit: 'µkat/L', ref: '<3.5', cat: 'Muskler & Leder' }
   ];
 
   function getBloodEntry(tp) {
@@ -1706,7 +1752,7 @@
     BLOOD_TIMEPOINTS.forEach(function (tp) { html += '<th>' + esc(tp.label) + '</th>'; });
     html += '</tr></thead><tbody>';
     rows.forEach(function (m) {
-      html += '<tr><td class="blood-row-label">' + esc(m.label) + '<span class="blood-row-unit">' + esc(m.unit) + '</span></td>';
+      html += '<tr><td class="blood-row-label">' + esc(m.label) + '<span class="blood-row-unit">' + esc(m.unit) + (m.ref ? ' · ref ' + esc(m.ref) : '') + '</span></td>';
       BLOOD_TIMEPOINTS.forEach(function (tp) {
         var e = db.bloodwork[tp.key];
         var v = e ? e[m.key] : '';
@@ -2810,8 +2856,9 @@
     bloodCategories().forEach(function (cat) {
       html += '<div class="blood-cat-label">' + esc(cat) + '</div>';
       BLOOD_MARKERS.filter(function (m) { return m.cat === cat; }).forEach(function (m) {
-        html += '<div class="daylog-field"><label for="blood-' + m.key + '">' + esc(m.label) + ' (' + esc(m.unit) + ')</label>' +
-          '<input id="blood-' + m.key + '" type="number" inputmode="decimal" step="0.01" placeholder="0" value="' + esc(entry[m.key]) + '"></div>';
+        html += '<div class="daylog-field"><label for="blood-' + m.key + '">' + esc(m.label) + ' (' + esc(m.unit) + ')' +
+          (m.ref ? ' <span class="ref-hint">ref ' + esc(m.ref) + '</span>' : '') + '</label>' +
+          '<input id="blood-' + m.key + '" type="text" inputmode="decimal" placeholder="0" value="' + esc(entry[m.key]) + '"></div>';
       });
     });
     html += '</div>';
