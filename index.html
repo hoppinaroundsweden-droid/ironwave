@@ -1176,6 +1176,38 @@
     { id: 'm7', time: '23:30', name: 'Meal 6 — Post-Workout Shake', items: ['2dl Whey 100', '5dl Mellanmjölk', '240g Black and White Beans (Mixed Into Shake)', '30ml Olive Oil', '15 Kalamata Oliver'], macros: { kcal: 1084, protein: 87, carbs: 64, fat: 55 } },
     { id: 'm8', time: '01:00', name: 'Meal 7 — Pre-Bed', items: ['500g Kvarg', '200g Hallon'], macros: { kcal: 376, protein: 57, carbs: 28, fat: 3 } }
   ];
+
+  /* Weekend variant — same 7 time slots/ids as the weekday plan above (so
+     everything keyed by meal id, like the stall-breaker anchor on 'm4' and
+     the day's checked-off state, keeps working without change), different
+     food. Built deliberately: no gym carb shake (Sat/Sun are rest days, so
+     the fast-carb/citrulline/Hydromax formula has nothing to fuel), fat
+     pushed well above the weekday total on purpose (mostly monounsaturated,
+     to support HDL/total cholesterol which came back below range on the
+     pre-cycle bloodwork), fiber way up via whole-food swaps, calories and
+     carbs brought back close to the weekday total with a maltodextrin+olive
+     shake in the vacated gym-shake slot (olives alongside the fast carb to
+     blunt the glucose spike a little, since there's no training session to
+     soak it up). Daily total: ~4310 kcal / 321g protein / 450g carbs / 154g
+     fat, vs. the weekday plan's ~4169 / 312 / 529 / 90. */
+  var WEEKEND_MEALS = [
+    { id: 'm1', time: '15:00', name: 'Meal 1 — Lunch (Weekend)', items: ['200g Sötpotatis', '200g Kycklinglårfile (Innerlår)', '1/2 Avokado', '30ml Olivolja (för ugnsbak av sötpotatisen)'], macros: { kcal: 790, protein: 44, carbs: 68, fat: 49 } },
+    { id: 'm2', time: '16:30', name: 'Meal 2 — Mid-Day Shake', items: ['1dl Whey 100 (32g)', '3dl Mellanmjölk'], macros: { kcal: 246, protein: 37, carbs: 16, fat: 5 } },
+    { id: 'm3', time: '18:00', name: 'Meal 3 — Dinner (Weekend)', items: ['100g Brunt Ris', '150g Kycklinglårfile (Innerlår)', '100g Broccoli', '10g Olivolja'], macros: { kcal: 651, protein: 42, carbs: 79, fat: 20 } },
+    { id: 'm4', time: '19:30', name: 'Meal 4 — Carb & Fat Shake (Rest Day)', items: ['80g Maltodextrin', '10 Kalamata Oliver', '~400ml Water'], macros: { kcal: 349, protein: 0, carbs: 77, fat: 5 } },
+    { id: 'm6', time: '22:00', name: 'Meal 5 — Evening Meal (Weekend)', items: ['200g Alaska Pollock', '100g Vitt Ris', '100g Svarta Bönor', '200g Tomat'], macros: { kcal: 646, protein: 50, carbs: 109, fat: 4 } },
+    { id: 'm7', time: '23:30', name: 'Meal 6 — Post-Workout Shake', items: ['2dl Whey 100', '5dl Mellanmjölk', '240g Black and White Beans (Mixed Into Shake)', '30ml Olive Oil', '15 Kalamata Oliver'], macros: { kcal: 1084, protein: 87, carbs: 64, fat: 55 } },
+    { id: 'm8', time: '01:00', name: 'Meal 7 — Pre-Bed (Weekend)', items: ['500g Kvarg', '300g Hallon', '20g Valnötter'], macros: { kcal: 544, protein: 61, carbs: 37, fat: 16 } }
+  ];
+
+  function isWeekendISO(dateISO) {
+    var dow = new Date(dateISO + 'T00:00:00').getDay(); // 0 = Sun, 6 = Sat
+    return dow === 0 || dow === 6;
+  }
+  function mealsForDate(dateISO) {
+    return isWeekendISO(dateISO) ? WEEKEND_MEALS : MEALS;
+  }
+
   var MACRO_TARGETS = { protein: 300, carbs: 500, fat: 110 };
   var MACRO_TARGET_KCAL = MACRO_TARGETS.protein * 4 + MACRO_TARGETS.carbs * 4 + MACRO_TARGETS.fat * 9;
 
@@ -2650,13 +2682,14 @@
       lines.push('== Nutrition (last 7 days) ==');
       nutriDaysEarly.forEach(function (d) {
         var log = db.nutrition[d];
-        var eaten = MEALS.filter(function (m) { return !!log.meals[m.id]; }).length;
-        var totals = nutritionTotals(log);
+        var dayMeals = mealsForDate(d);
+        var eaten = dayMeals.filter(function (m) { return !!log.meals[m.id]; }).length;
+        var totals = nutritionTotals(log, d);
         var summaryStr = totals.kcal
           ? (Math.round(totals.kcal) + ' kcal, ' + Math.round(totals.protein) + 'g protein, ' + Math.round(totals.carbs) + 'g carbs, ' + Math.round(totals.fat) + 'g fat')
           : 'no macros logged';
         if (log.meals[STALL_MEAL.id]) summaryStr += ' [+stall-breaker shake]';
-        lines.push('- ' + dateLabel(d) + ': ' + eaten + '/' + MEALS.length + ' meals — ' + summaryStr);
+        lines.push('- ' + dateLabel(d) + ': ' + eaten + '/' + dayMeals.length + ' meals — ' + summaryStr);
       });
       lines.push('');
     }
@@ -2709,12 +2742,12 @@
 
   /* Sum of the checked-off meals' own macros — these are the user's real
      figures for their actual brands, not estimated by the app. */
-  function mealAutoTotals(log) {
+  function mealAutoTotals(log, dateISO) {
     var t = { kcal: 0, protein: 0, carbs: 0, fat: 0 };
     // Include the stall-breaker shake in the concat regardless of whether
     // it's stalled right now, so a day's totals stay correct even if you
     // check it off and the stall condition happens to clear later that day.
-    MEALS.concat([STALL_MEAL]).forEach(function (m) {
+    mealsForDate(dateISO).concat([STALL_MEAL]).forEach(function (m) {
       if (!log.meals[m.id]) return;
       t.kcal += m.macros.kcal; t.protein += m.macros.protein;
       t.carbs += m.macros.carbs; t.fat += m.macros.fat;
@@ -2727,8 +2760,8 @@
     var p = parseFloat(log.protein) || 0, c = parseFloat(log.carbs) || 0, f = parseFloat(log.fat) || 0;
     return p * 4 + c * 4 + f * 9;
   }
-  function nutritionTotals(log) {
-    var auto = mealAutoTotals(log);
+  function nutritionTotals(log, dateISO) {
+    var auto = mealAutoTotals(log, dateISO);
     return {
       kcal: auto.kcal + bonusKcal(log),
       protein: auto.protein + (parseFloat(log.protein) || 0),
@@ -2740,8 +2773,9 @@
   function renderNutrition() {
     var dateISO = todayISO();
     var log = getNutritionLog(dateISO);
-    var eatenCount = MEALS.filter(function (m) { return !!log.meals[m.id]; }).length;
-    var totals = nutritionTotals(log);
+    var todaysMeals = mealsForDate(dateISO);
+    var eatenCount = todaysMeals.filter(function (m) { return !!log.meals[m.id]; }).length;
+    var totals = nutritionTotals(log, dateISO);
     var targets = effectiveMacroTargets();
 
     var html = '';
@@ -2768,8 +2802,8 @@
       '<input id="n-fat" type="number" inputmode="decimal" placeholder="0" value="' + esc(log.fat) + '"></div>' +
       '</div>';
 
-    html += '<div class="week-heading">Meals &middot; ' + eatenCount + '/' + MEALS.length + ' logged today</div>';
-    MEALS.forEach(function (m) {
+    html += '<div class="week-heading">Meals &middot; ' + eatenCount + '/' + todaysMeals.length + ' logged today' + (isWeekendISO(dateISO) ? ' &mdash; weekend plan' : '') + '</div>';
+    todaysMeals.forEach(function (m) {
       var eaten = !!log.meals[m.id];
       html += '<button type="button" class="meal-card' + (eaten ? ' is-eaten' : '') + '" data-meal="' + m.id + '">' +
         '<div class="meal-row-top"><span class="meal-time">' + esc(m.time) + '</span>' +
