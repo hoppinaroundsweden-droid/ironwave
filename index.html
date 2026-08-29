@@ -73,12 +73,37 @@
   }
 
   /* ---------- App shell ---------- */
-  #topbar {
+  #app-header {
     position: sticky; top: 0; z-index: 10;
-    display: flex; align-items: center; gap: 0.75rem;
-    padding: calc(env(safe-area-inset-top, 0px) + 0.85rem) 1.1rem 0.85rem;
     background: var(--ink);
     border-bottom: 1px solid var(--border);
+  }
+  #topbar {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: calc(env(safe-area-inset-top, 0px) + 0.85rem) 1.1rem 0.85rem;
+  }
+  .injection-banner {
+    display: flex; align-items: center; gap: 0.65rem;
+    padding: 0.6rem 1.1rem;
+    background: var(--failure-ink);
+    border-top: 1px solid var(--failure);
+  }
+  .injection-banner[hidden] { display: none; }
+  .injection-banner-text {
+    flex: 1;
+    font-size: 0.78rem; font-weight: 600;
+    color: var(--failure);
+  }
+  .injection-banner button {
+    background: var(--failure);
+    color: var(--failure-ink);
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.74rem;
+    font-weight: 700;
+    padding: 0.45rem 0.7rem;
+    cursor: pointer;
+    white-space: nowrap;
   }
   #topbar .brand {
     font-family: var(--font-display);
@@ -982,12 +1007,15 @@
   }
 </style>
 
-<div id="topbar">
-  <button id="back-btn" aria-label="Back">&larr;</button>
-  <div>
-    <div class="brand">Iron<span>wave</span></div>
-    <div class="screen-label" id="screen-label">Program</div>
+<div id="app-header">
+  <div id="topbar">
+    <button id="back-btn" aria-label="Back">&larr;</button>
+    <div>
+      <div class="brand">Iron<span>wave</span></div>
+      <div class="screen-label" id="screen-label">Program</div>
+    </div>
   </div>
+  <div class="injection-banner" id="injection-banner" hidden></div>
 </div>
 
 <div id="content"></div>
@@ -1221,7 +1249,8 @@
   /* ================= Storage ================= */
   var DB_KEY = 'ironwave_v1';
   var DEFAULT_MESO_START = '2026-08-31';
-  var db = { sessions: {}, mesoStart: DEFAULT_MESO_START, records: {}, nutrition: {}, bodyLog: {}, bloodwork: {} };
+  function freshInjections() { return { active: false, startTs: null, lastConfirmedSlot: -1, history: [] }; }
+  var db = { sessions: {}, mesoStart: DEFAULT_MESO_START, records: {}, nutrition: {}, bodyLog: {}, bloodwork: {}, injections: freshInjections() };
   (function load() {
     try {
       var raw = localStorage.getItem(DB_KEY);
@@ -1232,7 +1261,8 @@
       if (!db.nutrition) db.nutrition = {};
       if (!db.bodyLog) db.bodyLog = {};
       if (!db.bloodwork) db.bloodwork = {};
-    } catch (e) { db = { sessions: {}, mesoStart: DEFAULT_MESO_START, records: {}, nutrition: {}, bodyLog: {}, bloodwork: {} }; }
+      if (!db.injections) db.injections = freshInjections();
+    } catch (e) { db = { sessions: {}, mesoStart: DEFAULT_MESO_START, records: {}, nutrition: {}, bodyLog: {}, bloodwork: {}, injections: freshInjections() }; }
   })();
   function save() {
     try { localStorage.setItem(DB_KEY, JSON.stringify(db)); } catch (e) { /* storage unavailable — state stays in memory this visit */ }
@@ -1372,6 +1402,9 @@
   function dateLabel(iso) {
     var d = new Date(iso + 'T00:00:00');
     return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+  }
+  function injectionTimeLabel(ts) {
+    return new Date(ts).toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
   function sessionKey(dateISO, dayId) { return dateISO + '__' + dayId; }
 
@@ -1764,6 +1797,71 @@
     return html;
   }
 
+  /* ---------- EOD injection timer ----------
+     A plain scheduling aid, not medical guidance: you tap Start the moment
+     you pin for the first time in a blast, and everything after is counted
+     in exact 48h blocks from that instant (not calendar days), so it stays
+     synced to your actual pin time regardless of when in the day that was.
+     "Slot 0" is the start pin itself (auto-confirmed). Slot N is due at
+     startTs + N*48h. If the current slot is past whatever you last
+     confirmed, a banner shows on every screen until you tap Injected —
+     tapping it always catches you up to the current slot, there's no need
+     to confirm every slot individually if you were late. */
+  var INJECTION_INTERVAL_MS = 48 * 60 * 60 * 1000;
+
+  function injectionSlotIndex(ts) {
+    if (!db.injections.active || !db.injections.startTs) return null;
+    return Math.floor((ts - db.injections.startTs) / INJECTION_INTERVAL_MS);
+  }
+
+  function injectionDue() {
+    if (!db.injections.active) return false;
+    var slot = injectionSlotIndex(Date.now());
+    return slot !== null && slot > db.injections.lastConfirmedSlot;
+  }
+
+  function injectionNextDueAt() {
+    if (!db.injections.active) return null;
+    return db.injections.startTs + (db.injections.lastConfirmedSlot + 1) * INJECTION_INTERVAL_MS;
+  }
+
+  function startInjectionTimer() {
+    var now = Date.now();
+    db.injections = { active: true, startTs: now, lastConfirmedSlot: 0, history: [{ slot: 0, ts: now }] };
+    save();
+  }
+
+  function confirmInjection() {
+    var slot = injectionSlotIndex(Date.now());
+    if (slot === null || slot <= db.injections.lastConfirmedSlot) return;
+    db.injections.lastConfirmedSlot = slot;
+    db.injections.history.push({ slot: slot, ts: Date.now() });
+    save();
+  }
+
+  function stopInjectionTimer() {
+    db.injections.active = false;
+    save();
+  }
+
+  // Renders (or hides) the persistent top-of-app banner. Runs on every
+  // screen render plus a periodic tick, so it appears the moment a new
+  // 48h block starts even if you never leave the screen you're on.
+  function renderInjectionBanner() {
+    var el = document.getElementById('injection-banner');
+    if (!el) return;
+    if (!injectionDue()) { el.hidden = true; el.innerHTML = ''; return; }
+    var slot = injectionSlotIndex(Date.now());
+    el.hidden = false;
+    el.innerHTML = '<span class="injection-banner-text">Injection day ' + (slot + 1) + ' &mdash; log it once it\'s done</span>' +
+      '<button id="injection-confirm-btn">Injected</button>';
+    document.getElementById('injection-confirm-btn').addEventListener('click', function () {
+      confirmInjection();
+      renderInjectionBanner();
+      if (screen === 'blood') renderBlood();
+    });
+  }
+
   function findLastLog(exName, beforeDateISO, excludeDayId, excludeDateISO) {
     var best = null;
     Object.keys(db.sessions).forEach(function (key) {
@@ -2004,6 +2102,7 @@
   }
 
   function render() {
+    renderInjectionBanner();
     if (screen === 'home') { screenLabel.textContent = 'Program'; renderHome(); }
     else if (screen === 'workout') { screenLabel.textContent = 'Workout'; renderWorkout(); }
     else if (screen === 'records') { screenLabel.textContent = 'Personal Records'; renderRecords(); }
@@ -2843,6 +2942,28 @@
 
     var html = '<div class="summary-meta">Pre/during/post bloodwork, side by side for your own comparison &mdash; enter values exactly as they appear on your lab report. During #2 is there if you want a second check mid-cycle; leave it empty otherwise. This is a plain log: nothing here is flagged, scored, or interpreted, so read your results with your doctor.</div>';
 
+    html += '<div class="week-heading">EOD Injection Timer</div>';
+    html += '<div class="reset-block" style="margin-top:0;padding-top:0;border-top:none;">';
+    if (!db.injections.active) {
+      html += '<div class="reset-hint">Starts a 48-hour reminder cycle from the exact moment you tap this &mdash; tap it when you pin for the first time in a blast, so everything after stays synced to that exact time. From then on, every 48h you\'ll get a banner at the top of the app until you confirm that day\'s injection.</div>' +
+        '<button class="ghost-btn" id="injection-start-btn" style="color:var(--accent-strong)">Start blast timer</button>';
+    } else {
+      var startLabel = injectionTimeLabel(db.injections.startTs);
+      var statusLine;
+      if (injectionDue()) {
+        statusLine = 'Injection day ' + (injectionSlotIndex(Date.now()) + 1) + ' is due now.';
+      } else {
+        statusLine = 'Next injection due ' + injectionTimeLabel(injectionNextDueAt()) + '.';
+      }
+      html += '<div class="reset-hint">Started ' + startLabel + '. ' + statusLine +
+        ' ' + db.injections.history.length + ' confirmed since start.</div>';
+      if (injectionDue()) {
+        html += '<button class="ghost-btn" id="injection-confirm-btn2" style="color:var(--accent-strong)">Injected</button>';
+      }
+      html += '<button class="ghost-btn" id="injection-stop-btn">Stop injection timer</button>';
+    }
+    html += '</div>';
+
     html += '<div class="week-heading">Log a timepoint</div>';
     html += '<div class="daylog-card">' +
       '<div class="daylog-field full"><label for="blood-timepoint">Timepoint</label><select id="blood-timepoint">';
@@ -2873,6 +2994,39 @@
     }
 
     content.innerHTML = html;
+
+    var injStartBtn = document.getElementById('injection-start-btn');
+    if (injStartBtn) {
+      injStartBtn.addEventListener('click', function () {
+        startInjectionTimer();
+        renderInjectionBanner();
+        renderBlood();
+      });
+    }
+    var injConfirmBtn2 = document.getElementById('injection-confirm-btn2');
+    if (injConfirmBtn2) {
+      injConfirmBtn2.addEventListener('click', function () {
+        confirmInjection();
+        renderInjectionBanner();
+        renderBlood();
+      });
+    }
+    var injStopBtn = document.getElementById('injection-stop-btn');
+    if (injStopBtn) {
+      var confirmingInjStop = false;
+      injStopBtn.addEventListener('click', function () {
+        if (!confirmingInjStop) {
+          confirmingInjStop = true;
+          injStopBtn.textContent = 'Tap again to confirm stop';
+          setTimeout(function () { confirmingInjStop = false; injStopBtn.textContent = 'Stop injection timer'; }, 3000);
+          return;
+        }
+        stopInjectionTimer();
+        renderInjectionBanner();
+        confirmingInjStop = false;
+        renderBlood();
+      });
+    }
 
     var tpSel = document.getElementById('blood-timepoint');
     tpSel.addEventListener('change', function () {
@@ -3125,10 +3279,13 @@
   // timer show the correct value right away rather than a stale one from
   // before you switched away, even if the interval itself got suspended.
   document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'visible') tickRest();
+    if (document.visibilityState === 'visible') { tickRest(); renderInjectionBanner(); }
   });
-  window.addEventListener('focus', function () { tickRest(); });
-  window.addEventListener('pageshow', function () { tickRest(); });
+  window.addEventListener('focus', function () { tickRest(); renderInjectionBanner(); });
+  window.addEventListener('pageshow', function () { tickRest(); renderInjectionBanner(); });
+  // Catches the exact moment a new 48h block starts while the app just
+  // sits open on a screen you're not navigating away from.
+  setInterval(renderInjectionBanner, 60 * 1000);
 
   backBtn.addEventListener('click', function () { setScreen('home'); });
   tabHome.addEventListener('click', function () { setScreen('home'); });
