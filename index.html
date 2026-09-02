@@ -936,6 +936,27 @@
     margin-top: 0.1rem;
   }
   .record-empty { color: var(--text-faint); font-family: var(--font-body); }
+  button.record-row {
+    width: 100%;
+    background: none; border: none; border-bottom: 1px solid var(--border);
+    color: inherit; font: inherit; text-align: left; cursor: pointer;
+  }
+  button.record-row:last-child { border-bottom: none; }
+  .record-row.is-editing { flex-direction: column; align-items: stretch; gap: 0.5rem; padding: 0.8rem 0; }
+  .record-edit-fields { display: flex; align-items: center; gap: 0.5rem; }
+  .record-edit-fields input {
+    flex: 1; min-width: 0;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: 0.6rem;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: 0.5rem 0.6rem;
+  }
+  .record-edit-x { color: var(--text-faint); font-size: 0.8rem; }
+  .record-edit-actions { display: flex; gap: 0.5rem; }
+  .record-edit-actions .ghost-btn { flex: 1; margin: 0; }
   .reset-block {
     margin-top: 1.8rem;
     padding-top: 1.2rem;
@@ -1072,7 +1093,7 @@
       ['Incline Seated Dumbbell Curl',5,'Heavy day — low rep, big weights'],
       ['Machine Preacher Curl',5,'Heavy day — low rep, big weights'],
       ['V-Bar Tricep Pushdown',4,'Heavy day — low rep, big weights'],
-      ['Machine Dip / Close-Grip Machine Press',4,'Heavy day — low rep, compound triceps mass builder'],
+      ['Skullcrushers',4,'Heavy day — low rep, compound triceps mass builder'],
       ['Rope Tricep Overhead Extension',3,'Heavy day — low rep, big weights'],
       ['Ab Machine',3,'']
     ]},
@@ -1100,7 +1121,7 @@
       ['Machine Preacher Curl',5,'Failure day — push to pure failure, utilize dropsets'],
       ['Seated Hammer Curl',5,'Failure day — push to pure failure, utilize dropsets'],
       ['Tricep Pushdown Machine',3,'Failure day — push to pure failure, utilize dropsets'],
-      ['Machine Dip / Close-Grip Machine Press',4,'Failure day — dropset on last set'],
+      ['Skullcrushers',4,'Failure day — dropset on last set'],
       ['Rope Tricep Overhead Extension',3,'Failure day — push to pure failure, utilize dropsets'],
       ['Ab Machine',4,'']
     ]},
@@ -1120,7 +1141,7 @@
       ['Incline Seated Dumbbell Curl',5,'Moderate weight, chase pump'],
       ['Machine Preacher Curl',5,'Moderate weight, chase pump'],
       ['V-Bar Tricep Pushdown',4,'Moderate weight, chase pump'],
-      ['Machine Dip / Close-Grip Machine Press',4,'Moderate weight, chase pump, short rest'],
+      ['Skullcrushers',4,'Moderate weight, chase pump, short rest'],
       ['Rope Tricep Overhead Extension',3,'Moderate weight, chase pump'],
       ['Ab Machine',3,'']
     ]},
@@ -1148,7 +1169,7 @@
       ['Incline Seated Dumbbell Curl',5,'Heavy day — low rep, big weights'],
       ['Seated Hammer Curl',5,'Heavy day — low rep, big weights'],
       ['Tricep Pushdown Machine',4,'Heavy day — low rep, big weights'],
-      ['Machine Dip / Close-Grip Machine Press',4,'Heavy day — low rep, big weights'],
+      ['Skullcrushers',4,'Heavy day — low rep, big weights'],
       ['Rope Tricep Overhead Extension',3,'Heavy day — low rep, big weights'],
       ['Ab Machine',4,'']
     ]}
@@ -1271,7 +1292,7 @@
     'Seated Hammer Curl': 'Biceps',
     'V-Bar Tricep Pushdown': 'Triceps',
     'Tricep Pushdown Machine': 'Triceps',
-    'Machine Dip / Close-Grip Machine Press': 'Triceps',
+    'Skullcrushers': 'Triceps',
     'Rope Tricep Overhead Extension': 'Triceps',
     'Leg Press Machine': 'Legs',
     'Leg Extension': 'Legs',
@@ -2114,6 +2135,7 @@
   var tabBlood = document.getElementById('tab-blood');
   var bodyFormWeek = null;
   var bloodFormTimepoint = null;
+  var recordsEditName = null;
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -2125,6 +2147,7 @@
     screen = next;
     activeKey = key || null;
     skipFormOpen = false;
+    recordsEditName = null;
     backBtn.style.display = next === 'workout' ? 'flex' : 'none';
     tabHome.classList.toggle('active', next === 'home');
     tabSummary.classList.toggle('active', next === 'summary');
@@ -3111,19 +3134,74 @@
         names.push(name);
       });
     });
-    var html = '<div class="summary-meta">All-time top weight logged per exercise — this list is kept even after "Clear all data," so you know what to start at when a new mesocycle begins.</div>';
+    var html = '<div class="summary-meta">All-time top weight logged per exercise — this list is kept even after "Clear all data," so you know what to start at when a new mesocycle begins. Tap a row to fix a mis-typed number — a manual edit isn\'t held to the "only ever goes up" rule that normal logging follows.</div>';
     html += '<div class="records-list">';
     names.forEach(function (name) {
       var rec = db.records[name];
-      html += '<div class="record-row"><span class="record-name">' + esc(name) + '</span>' +
-        '<span class="record-value">' +
-        (rec
-          ? rec.weight + (rec.reps ? '&times;' + rec.reps : '') + '<span class="record-date">' + esc(dateLabel(rec.date)) + '</span>'
-          : '<span class="record-empty">—</span>') +
-        '</span></div>';
+      if (recordsEditName === name) {
+        html += '<div class="record-row is-editing">' +
+          '<span class="record-name">' + esc(name) + '</span>' +
+          '<div class="record-edit-fields">' +
+          '<input type="number" inputmode="decimal" step="0.5" placeholder="kg" id="rec-edit-weight" value="' + (rec ? esc(rec.weight) : '') + '">' +
+          '<span class="record-edit-x">&times;</span>' +
+          '<input type="number" inputmode="numeric" placeholder="reps" id="rec-edit-reps" value="' + (rec && rec.reps ? esc(rec.reps) : '') + '">' +
+          '</div>' +
+          '<div class="record-edit-actions">' +
+          '<button type="button" class="ghost-btn" id="record-save-btn" style="color:var(--accent-strong)">Save</button>' +
+          (rec ? '<button type="button" class="ghost-btn" id="record-clear-btn">Clear</button>' : '') +
+          '<button type="button" class="ghost-btn" id="record-cancel-btn">Cancel</button>' +
+          '</div>' +
+          '</div>';
+      } else {
+        html += '<button type="button" class="record-row" data-name="' + esc(name) + '"><span class="record-name">' + esc(name) + '</span>' +
+          '<span class="record-value">' +
+          (rec
+            ? rec.weight + (rec.reps ? '&times;' + rec.reps : '') + '<span class="record-date">' + esc(dateLabel(rec.date)) + '</span>'
+            : '<span class="record-empty">—</span>') +
+          '</span></button>';
+      }
     });
     html += '</div>';
     content.innerHTML = html;
+
+    content.querySelectorAll('button.record-row').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        recordsEditName = btn.getAttribute('data-name');
+        renderRecords();
+      });
+    });
+
+    var saveBtn = document.getElementById('record-save-btn');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', function () {
+        var name = recordsEditName;
+        var w = parseFloat(document.getElementById('rec-edit-weight').value);
+        if (isNaN(w) || w <= 0) { showToast('Enter a valid weight'); return; }
+        var r = parseInt(document.getElementById('rec-edit-reps').value, 10);
+        if (isNaN(r) || r < 0) r = 0;
+        var existing = db.records[name];
+        db.records[name] = { weight: w, reps: r, date: existing ? existing.date : todayISO() };
+        save();
+        recordsEditName = null;
+        renderRecords();
+      });
+    }
+    var clearBtn = document.getElementById('record-clear-btn');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', function () {
+        delete db.records[recordsEditName];
+        save();
+        recordsEditName = null;
+        renderRecords();
+      });
+    }
+    var cancelBtn = document.getElementById('record-cancel-btn');
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', function () {
+        recordsEditName = null;
+        renderRecords();
+      });
+    }
   }
 
   function renderVolumeHtml() {
