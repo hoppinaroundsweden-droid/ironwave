@@ -1455,6 +1455,22 @@
     var day = String(d.getDate()).padStart(2, '0');
     return d.getFullYear() + '-' + m + '-' + day;
   }
+  // Meal 7 (Pre-Bed) is scheduled 01:00 — after real midnight, but still
+  // "part of" the day whose other 6 meals were eaten the evening before.
+  // Bucketing nutrition by the plain calendar date meant checking off Meal 7
+  // right after midnight logged it against the NEW day (which hadn't
+  // started yet), so it never landed on the day it belonged to, and then
+  // showed up pre-checked the next evening — tapping it there just toggled
+  // it back off. Nothing eats between 01:00 and Meal 1 at 15:00, so any
+  // cutoff in that window works; 06:00 gives a comfortable margin if Meal 7
+  // slips a bit late some nights.
+  function nutritionDateISO() {
+    var d = new Date();
+    if (d.getHours() < 6) d.setDate(d.getDate() - 1);
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return d.getFullYear() + '-' + m + '-' + day;
+  }
   function dateLabel(iso) {
     var d = new Date(iso + 'T00:00:00');
     return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
@@ -2747,7 +2763,7 @@
   }
 
   function last7NutritionDays() {
-    var today = todayISO();
+    var today = nutritionDateISO();
     var cutoff = new Date(today + 'T00:00:00');
     cutoff.setDate(cutoff.getDate() - 6);
     var cutoffISO = cutoff.toISOString().slice(0, 10);
@@ -2797,7 +2813,7 @@
   }
 
   function renderNutrition() {
-    var dateISO = todayISO();
+    var dateISO = nutritionDateISO();
     var log = getNutritionLog(dateISO);
     var todaysMeals = mealsForDate(dateISO);
     var eatenCount = todaysMeals.filter(function (m) { return !!log.meals[m.id]; }).length;
