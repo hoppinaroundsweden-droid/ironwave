@@ -1089,12 +1089,12 @@
     { id:'w1-tue', week:1, weekday:'Tuesday', title:'Shoulders & Arms', tag:'Heavy Day', type:'heavy', ex:[
       ['Machine Shoulder Press',4,'Gradual increase — last 2 sets heavy, under 9 reps'],
       ['Panetta Lateral Raise Machine',6,'Push hard, but VERY controlled'],
-      ['Reverse Pec Deck (Rear Delt)',5,'Push hard, but VERY controlled'],
+      ['Cable Rear Delt Crossovers',5,'Push hard, but VERY controlled'],
       ['Incline Seated Dumbbell Curl',5,'Heavy day — low rep, big weights'],
       ['Machine Preacher Curl',5,'Heavy day — low rep, big weights'],
       ['V-Bar Tricep Pushdown',4,'Heavy day — low rep, big weights'],
       ['Skullcrushers',4,'Heavy day — low rep, compound triceps mass builder'],
-      ['Rope Tricep Overhead Extension',3,'Heavy day — low rep, big weights'],
+      ['V-Bar Tricep Overhead Extension',3,'Heavy day — low rep, big weights'],
       ['Ab Machine',3,'']
     ]},
     { id:'w1-wed', week:1, weekday:'Wednesday', title:'Legs & Delt Top-Up', tag:'Maintenance', type:'moderate', ex:[
@@ -1117,12 +1117,12 @@
     { id:'w1-fri', week:1, weekday:'Friday', title:'Shoulders & Arms', tag:'Failure / Pump', type:'failure', ex:[
       ['Machine Shoulder Press',4,'Moderate weight, push to failure on last set'],
       ['Panetta Lateral Raise Machine',6,'Failure day — push to pure failure, utilize dropsets'],
-      ['Reverse Pec Deck (Rear Delt)',5,'Failure day — push to pure failure, utilize dropsets'],
+      ['Cable Rear Delt Crossovers',5,'Failure day — push to pure failure, utilize dropsets'],
       ['Machine Preacher Curl',5,'Failure day — push to pure failure, utilize dropsets'],
       ['Seated Hammer Curl',5,'Failure day — push to pure failure, utilize dropsets'],
-      ['Tricep Pushdown Machine',3,'Failure day — push to pure failure, utilize dropsets'],
+      ['V-Bar Tricep Pushdown',3,'Failure day — push to pure failure, utilize dropsets'],
       ['Skullcrushers',4,'Failure day — dropset on last set'],
-      ['Rope Tricep Overhead Extension',3,'Failure day — push to pure failure, utilize dropsets'],
+      ['V-Bar Tricep Overhead Extension',3,'Failure day — push to pure failure, utilize dropsets'],
       ['Ab Machine',4,'']
     ]},
     { id:'w2-mon', week:2, weekday:'Monday', title:'Chest & Back', tag:'Failure / Pump', type:'failure', ex:[
@@ -1137,12 +1137,12 @@
     { id:'w2-tue', week:2, weekday:'Tuesday', title:'Shoulders & Arms', tag:'Pump Day', type:'pump', ex:[
       ['Machine Shoulder Press',4,'Moderate weight, controlled, chase pump'],
       ['Panetta Lateral Raise Machine',6,'Pump day — low weight, exhaust the muscle, chase pump'],
-      ['Reverse Pec Deck (Rear Delt)',5,'Pump day — low weight, exhaust the muscle, chase pump'],
+      ['Cable Rear Delt Crossovers',5,'Pump day — low weight, exhaust the muscle, chase pump'],
       ['Incline Seated Dumbbell Curl',5,'Moderate weight, chase pump'],
       ['Machine Preacher Curl',5,'Moderate weight, chase pump'],
       ['V-Bar Tricep Pushdown',4,'Moderate weight, chase pump'],
       ['Skullcrushers',4,'Moderate weight, chase pump, short rest'],
-      ['Rope Tricep Overhead Extension',3,'Moderate weight, chase pump'],
+      ['V-Bar Tricep Overhead Extension',3,'Moderate weight, chase pump'],
       ['Ab Machine',3,'']
     ]},
     { id:'w2-wed', week:2, weekday:'Wednesday', title:'Legs & Delt Top-Up', tag:'Maintenance', type:'moderate', ex:[
@@ -1165,12 +1165,12 @@
     { id:'w2-fri', week:2, weekday:'Friday', title:'Shoulders & Arms', tag:'Heavy Day', type:'heavy', ex:[
       ['Machine Shoulder Press',4,'Gradual increase — last 2 sets heavy, under 9 reps'],
       ['Panetta Lateral Raise Machine',6,'Heavy day — low rep, big weights, VERY controlled'],
-      ['Reverse Pec Deck (Rear Delt)',5,'Heavy day — low rep, big weights, VERY controlled'],
+      ['Cable Rear Delt Crossovers',5,'Heavy day — low rep, big weights, VERY controlled'],
       ['Incline Seated Dumbbell Curl',5,'Heavy day — low rep, big weights'],
       ['Seated Hammer Curl',5,'Heavy day — low rep, big weights'],
-      ['Tricep Pushdown Machine',4,'Heavy day — low rep, big weights'],
+      ['V-Bar Tricep Pushdown',4,'Heavy day — low rep, big weights'],
       ['Skullcrushers',4,'Heavy day — low rep, big weights'],
-      ['Rope Tricep Overhead Extension',3,'Heavy day — low rep, big weights'],
+      ['V-Bar Tricep Overhead Extension',3,'Heavy day — low rep, big weights'],
       ['Ab Machine',4,'']
     ]}
   ];
@@ -1285,15 +1285,14 @@
     'Dumbbell Shrugs': 'Traps',
     'Panetta Lateral Raise Machine': 'Lateral Delts',
     'Lateral Raise (Machine or Cable)': 'Lateral Delts',
-    'Reverse Pec Deck (Rear Delt)': 'Rear Delts',
+    'Cable Rear Delt Crossovers': 'Rear Delts',
     'Face Pulls (Rope)': 'Rear Delts',
     'Incline Seated Dumbbell Curl': 'Biceps',
     'Machine Preacher Curl': 'Biceps',
     'Seated Hammer Curl': 'Biceps',
     'V-Bar Tricep Pushdown': 'Triceps',
-    'Tricep Pushdown Machine': 'Triceps',
     'Skullcrushers': 'Triceps',
-    'Rope Tricep Overhead Extension': 'Triceps',
+    'V-Bar Tricep Overhead Extension': 'Triceps',
     'Leg Press Machine': 'Legs',
     'Leg Extension': 'Legs',
     'Leg Curl': 'Legs',
@@ -1301,6 +1300,12 @@
     'Machine Shoulder Press': 'Front Delts',
     'Ab Machine': 'Abs'
   };
+
+  // A couple of machines at the user's gym show resistance as a level
+  // number (e.g. 1-16), not kg — this lets the weight input/placeholder
+  // reflect that per-exercise instead of always assuming kg.
+  var EXERCISE_WEIGHT_UNIT = { 'Machine Preacher Curl': 'lvl' };
+  function weightUnit(name) { return EXERCISE_WEIGHT_UNIT[name] || 'kg'; }
 
   /* ================= Storage ================= */
   var DB_KEY = 'ironwave_v1';
@@ -2499,7 +2504,7 @@
             '<span class="set-idx">' + (i + 1) + '</span>' +
             '<div class="stepper">' +
             '<button type="button" class="step-btn" data-ex="' + exIdx + '" data-set="' + i + '" data-field="w" data-dir="-1">&minus;</button>' +
-            '<input type="number" inputmode="decimal" placeholder="kg" data-ex="' + exIdx + '" data-set="' + i + '" data-field="w" value="' + esc(s.w) + '">' +
+            '<input type="number" inputmode="decimal" placeholder="' + weightUnit(name) + '" data-ex="' + exIdx + '" data-set="' + i + '" data-field="w" value="' + esc(s.w) + '">' +
             '<button type="button" class="step-btn" data-ex="' + exIdx + '" data-set="' + i + '" data-field="w" data-dir="1">+</button>' +
             '</div>' +
             '<div class="stepper">' +
@@ -3158,7 +3163,7 @@
         html += '<div class="record-row is-editing">' +
           '<span class="record-name">' + esc(name) + '</span>' +
           '<div class="record-edit-fields">' +
-          '<input type="number" inputmode="decimal" step="0.5" placeholder="kg" id="rec-edit-weight" value="' + (rec ? esc(rec.weight) : '') + '">' +
+          '<input type="number" inputmode="decimal" step="0.5" placeholder="' + weightUnit(name) + '" id="rec-edit-weight" value="' + (rec ? esc(rec.weight) : '') + '">' +
           '<span class="record-edit-x">&times;</span>' +
           '<input type="number" inputmode="numeric" placeholder="reps" id="rec-edit-reps" value="' + (rec && rec.reps ? esc(rec.reps) : '') + '">' +
           '</div>' +
