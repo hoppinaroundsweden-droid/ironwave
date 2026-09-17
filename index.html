@@ -1084,7 +1084,7 @@
       ['V-Bar Lat Pulldown',4,'Gradual increase — last 2 sets heavy, under 9 reps'],
       ['Chest Supported Rows (Row Up)',5,'Gradual increase — last 2 sets heavy, under 9 reps'],
       ['Seated Cable Row, Close Grip (Row Mid)',3,'Medium-heavy, focus mid-back thickness'],
-      ['Dumbbell Shrugs',6,'Gradual increase, heavy top sets, pause & squeeze at the top']
+      ['Dumbbell Shrugs',3,'Gradual increase, heavy top sets, pause & squeeze at the top']
     ]},
     { id:'w1-tue', week:1, weekday:'Tuesday', title:'Shoulders & Arms', tag:'Heavy Day', type:'heavy', ex:[
       ['Machine Shoulder Press',4,'Gradual increase — last 2 sets heavy, under 9 reps'],
@@ -1110,9 +1110,9 @@
       ['Machine Incline Press',4,'Gradual increase — last 2 sets heavy, under 9 reps'],
       ['Incline Cable Flies',3,'Medium weight, chase pump'],
       ['Seated "Above Head" Rows (Row Down)',4,'Gradual increase — last 2 sets heavy, under 9 reps'],
-      ['Single-Arm Cable Row',4,'Controlled, full stretch & contraction, push toward failure on last set'],
+      ['Machine Row',4,'Controlled, full stretch & contraction, push toward failure on last set'],
       ['Straight-Arm Pulldown',3,'Lat isolation, controlled, chase pump'],
-      ['Dumbbell Shrugs',6,'Controlled, chase pump, hold & squeeze the contraction']
+      ['Dumbbell Shrugs',3,'Controlled, chase pump, hold & squeeze the contraction']
     ]},
     { id:'w1-fri', week:1, weekday:'Friday', title:'Shoulders & Arms', tag:'Failure / Pump', type:'failure', ex:[
       ['Machine Shoulder Press',4,'Moderate weight, push to failure on last set'],
@@ -1132,7 +1132,7 @@
       ['V-Bar Lat Pulldown',4,'Moderate weight, controlled, chase pump'],
       ['Chest Supported Rows (Row Up)',5,'Moderate weight, controlled, chase pump'],
       ['Seated Cable Row, Close Grip (Row Mid)',3,'Controlled, chase pump'],
-      ['Dumbbell Shrugs',6,'Moderate weight, chase pump, controlled full contraction']
+      ['Dumbbell Shrugs',3,'Moderate weight, chase pump, controlled full contraction']
     ]},
     { id:'w2-tue', week:2, weekday:'Tuesday', title:'Shoulders & Arms', tag:'Pump Day', type:'pump', ex:[
       ['Machine Shoulder Press',4,'Moderate weight, controlled, chase pump'],
@@ -1160,7 +1160,7 @@
       ['Seated "Above Head" Rows (Row Down)',4,'Gradual increase — last 2 sets heavy, under 9 reps'],
       ['Machine Row',4,'Gradual increase — last 2 sets heavy, under 9 reps'],
       ['Straight-Arm Pulldown',3,'Controlled, heavy stretch'],
-      ['Dumbbell Shrugs',6,'Gradual increase, heavy top sets, pause & squeeze at the top']
+      ['Dumbbell Shrugs',3,'Gradual increase, heavy top sets, pause & squeeze at the top']
     ]},
     { id:'w2-fri', week:2, weekday:'Friday', title:'Shoulders & Arms', tag:'Heavy Day', type:'heavy', ex:[
       ['Machine Shoulder Press',4,'Gradual increase — last 2 sets heavy, under 9 reps'],
@@ -1268,7 +1268,7 @@
      numbers aren't diluted by press work. */
   var VOLUME_TARGETS = {
     'Chest': 23, 'Back': 23, 'Front Delts': 8, 'Lateral Delts': 15, 'Rear Delts': 13,
-    'Biceps': 20, 'Triceps': 21, 'Traps': 12, 'Legs': 12, 'Abs': 7
+    'Biceps': 20, 'Triceps': 21, 'Traps': 6, 'Legs': 12, 'Abs': 7
   };
   var EXERCISE_MUSCLE = {
     'Incline Dumbbell Press': 'Chest',
@@ -1280,7 +1280,6 @@
     'Chest Supported Rows (Row Up)': 'Back',
     'Seated Cable Row, Close Grip (Row Mid)': 'Back',
     'Seated "Above Head" Rows (Row Down)': 'Back',
-    'Single-Arm Cable Row': 'Back',
     'Machine Row': 'Back',
     'Straight-Arm Pulldown': 'Back',
     'Dumbbell Shrugs': 'Traps',
@@ -2280,7 +2279,7 @@
         var done = recentlyDone(d.id);
         var skipped = !done && recentlySkipped(d.id);
         var isToday = isCurrent && d.weekday === todayWeekdayName();
-        html += '<button class="day-card' + (isToday ? ' is-today' : '') + '" data-open="' + d.id + '">' +
+        html += '<button class="day-card' + (isToday ? ' is-today' : '') + '" data-open="' + d.id + '" data-is-today="' + (isToday ? '1' : '0') + '" data-weekday="' + esc(d.weekday) + '">' +
           (done ? '<span class="done-mark">&#10003;</span>' : (skipped ? '<span class="skip-mark">&ndash;</span>' : '')) +
           '<span class="weekday">' + esc(d.weekday) + (isToday ? '<span class="today-mark">&bull; Today</span>' : '') + '</span>' +
           '<span class="title">' + esc(d.title) + '</span>' +
@@ -2306,6 +2305,11 @@
     content.querySelectorAll('[data-open]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var dayId = btn.getAttribute('data-open');
+        if (btn.getAttribute('data-is-today') !== '1') {
+          var todayName = todayWeekdayName();
+          var ok = confirm('This is ' + btn.getAttribute('data-weekday') + '’s workout, but today is ' + todayName + '. Log it dated today anyway?');
+          if (!ok) return;
+        }
         setScreen('workout', sessionKey(todayISO(), dayId));
       });
     });
