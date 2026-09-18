@@ -1114,7 +1114,7 @@
       ['Straight-Arm Pulldown',3,'Lat isolation, controlled, chase pump'],
       ['Dumbbell Shrugs',3,'Controlled, chase pump, hold & squeeze the contraction']
     ]},
-    { id:'w1-fri', week:1, weekday:'Friday', title:'Shoulders & Arms', tag:'Failure / Pump', type:'failure', ex:[
+    { id:'w1-fri', week:1, weekday:'Sunday', title:'Shoulders & Arms', tag:'Failure / Pump', type:'failure', ex:[
       ['Machine Shoulder Press',4,'Moderate weight, push to failure on last set'],
       ['Panetta Lateral Raise Machine',6,'Failure day — push to pure failure, utilize dropsets'],
       ['Cable Rear Delt Crossovers',5,'Failure day — push to pure failure, utilize dropsets'],
@@ -1162,7 +1162,7 @@
       ['Straight-Arm Pulldown',3,'Controlled, heavy stretch'],
       ['Dumbbell Shrugs',3,'Gradual increase, heavy top sets, pause & squeeze at the top']
     ]},
-    { id:'w2-fri', week:2, weekday:'Friday', title:'Shoulders & Arms', tag:'Heavy Day', type:'heavy', ex:[
+    { id:'w2-fri', week:2, weekday:'Sunday', title:'Shoulders & Arms', tag:'Heavy Day', type:'heavy', ex:[
       ['Machine Shoulder Press',4,'Gradual increase — last 2 sets heavy, under 9 reps'],
       ['Panetta Lateral Raise Machine',6,'Heavy day — low rep, big weights, VERY controlled'],
       ['Cable Rear Delt Crossovers',5,'Heavy day — low rep, big weights, VERY controlled'],
@@ -1198,11 +1198,13 @@
     { id: 'm8', time: '01:00', name: 'Meal 7 — Pre-Bed', items: ['500g Kvarg', '200g Hallon'], macros: { kcal: 376, protein: 57, carbs: 28, fat: 3 } }
   ];
 
-  /* Weekend variant — same 7 time slots/ids as the weekday plan above (so
-     everything keyed by meal id, like the stall-breaker anchor on 'm4' and
-     the day's checked-off state, keeps working without change), different
-     food. Built deliberately: no gym carb shake (Sat/Sun are rest days, so
-     the fast-carb/citrulline/Hydromax formula has nothing to fuel), fat
+  /* Rest-day variant — same 7 time slots/ids as the training-day plan above
+     (so everything keyed by meal id, like the stall-breaker anchor on 'm4'
+     and the day's checked-off state, keeps working without change),
+     different food. Applies Friday + Saturday (rest days as of the Sep 2026
+     split change that moved the Friday session to Sunday — see
+     isRestDietDay below). Built deliberately: no gym carb shake (rest days
+     have nothing for the fast-carb/citrulline/Hydromax formula to fuel), fat
      pushed well above the weekday total on purpose (mostly monounsaturated,
      to support HDL/total cholesterol which came back below range on the
      pre-cycle bloodwork), fiber way up via whole-food swaps, calories and
@@ -1224,12 +1226,12 @@
     { id: 'm8', time: '01:00', name: 'Meal 7 — Pre-Bed (Weekend)', items: ['500g Kvarg', '300g Hallon', '20g Valnötter'], macros: { kcal: 544, protein: 61, carbs: 37, fat: 16 } }
   ];
 
-  function isWeekendISO(dateISO) {
-    var dow = new Date(dateISO + 'T00:00:00').getDay(); // 0 = Sun, 6 = Sat
-    return dow === 0 || dow === 6;
+  function isRestDietDay(dateISO) {
+    var dow = new Date(dateISO + 'T00:00:00').getDay(); // 5 = Fri, 6 = Sat
+    return dow === 5 || dow === 6;
   }
   function mealsForDate(dateISO) {
-    return isWeekendISO(dateISO) ? WEEKEND_MEALS : MEALS;
+    return isRestDietDay(dateISO) ? WEEKEND_MEALS : MEALS;
   }
 
   var MACRO_TARGETS = { protein: 300, carbs: 500, fat: 110 };
@@ -2228,10 +2230,7 @@
         '<span class="phase-value">Week ' + info.templateWeek + ' template &middot; Day ' + info.dayNumber + '</span></div>';
 
       var wname = todayWeekdayName();
-      var todayDay = null;
-      if (wname !== 'Saturday' && wname !== 'Sunday') {
-        todayDay = PROGRAM.filter(function (d) { return d.week === info.templateWeek && d.weekday === wname; })[0];
-      }
+      var todayDay = PROGRAM.filter(function (d) { return d.week === info.templateWeek && d.weekday === wname; })[0] || null;
       html += '<div class="phase-today">Today: ' +
         (todayDay ? '<b>' + esc(todayDay.title) + '</b> &middot; ' + esc(todayDay.tag) : '<b>Rest day</b>') +
         '</div>';
@@ -2853,7 +2852,7 @@
       '<input id="n-fat" type="number" inputmode="decimal" placeholder="0" value="' + esc(log.fat) + '"></div>' +
       '</div>';
 
-    html += '<div class="week-heading">Meals &middot; ' + eatenCount + '/' + todaysMeals.length + ' logged today' + (isWeekendISO(dateISO) ? ' &mdash; weekend plan' : '') + '</div>';
+    html += '<div class="week-heading">Meals &middot; ' + eatenCount + '/' + todaysMeals.length + ' logged today' + (isRestDietDay(dateISO) ? ' &mdash; rest-day plan' : '') + '</div>';
     todaysMeals.forEach(function (m) {
       var eaten = !!log.meals[m.id];
       html += '<button type="button" class="meal-card' + (eaten ? ' is-eaten' : '') + '" data-meal="' + m.id + '">' +
