@@ -1429,6 +1429,25 @@
     fetch(PUSH_CONFIG.workerUrl + '/cancel-rest', { method: 'POST' }).catch(function () { /* best-effort */ });
   }
 
+  // Tells the Worker when the injection anchor starts/stops, purely so the
+  // weekly measurement-reminder push can pick 14:05 vs 16:00 (see
+  // MEASUREMENT_TIME in worker.js) — the Worker has no other way to know
+  // your injection schedule, since the timer itself is local-only and never
+  // pushes anything. Silently does nothing if notifications were never
+  // enabled; the in-app timer works the same either way.
+  function pushInjectionSync(startTs) {
+    if (!pushSupported() || !pushSubscribed) return;
+    fetch(PUSH_CONFIG.workerUrl + '/injection-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ startTs: startTs })
+    }).catch(function () { /* best-effort */ });
+  }
+  function pushInjectionClear() {
+    if (!pushSupported() || !pushSubscribed) return;
+    fetch(PUSH_CONFIG.workerUrl + '/injection-clear', { method: 'POST' }).catch(function () { /* best-effort */ });
+  }
+
   /* All-time personal-best weight per exercise. Deliberately kept separate from
      db.sessions so it survives "Clear all data & start new cycle" — the whole
      point is to know what to start at when a mesocycle restarts. Monotonic:
@@ -1907,6 +1926,7 @@
     var now = Date.now();
     db.injections = { active: true, startTs: now, lastConfirmedSlot: 0, history: [{ slot: 0, ts: now }] };
     save();
+    pushInjectionSync(now);
   }
 
   function confirmInjection() {
@@ -1920,6 +1940,7 @@
   function stopInjectionTimer() {
     db.injections.active = false;
     save();
+    pushInjectionClear();
   }
 
   // Renders (or hides) the persistent top-of-app banner. Runs on every
