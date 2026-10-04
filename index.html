@@ -1327,6 +1327,10 @@
       if (!db.bodyLog) db.bodyLog = {};
       if (!db.bloodwork) db.bloodwork = {};
       if (!db.injections) db.injections = freshInjections();
+      /* One-time: pull the calendar deload forward to the week of 5 Oct 2026
+         (shingles — see getMesoInfo). Only applies to the original cycle start;
+         clearing data or editing the cycle start date drops it again. */
+      if (db.deloadShift === undefined && db.mesoStart === '2026-08-31') db.deloadShift = '2026-10-05';
     } catch (e) { db = { sessions: {}, mesoStart: DEFAULT_MESO_START, records: {}, nutrition: {}, bodyLog: {}, bloodwork: {}, injections: freshInjections() }; }
   })();
   function save() {
@@ -1533,6 +1537,15 @@
     if (diff < 0) {
       return { started: false, daysUntilStart: -diff };
     }
+    /* Manual deload pull-forward: from db.deloadShift (a Monday) onward the clock
+       runs one week ahead, so that week becomes the deload and the next Monday
+       starts the next mesocycle. Only valid when the calendar deload was due the
+       following week; earlier dates are untouched so logged history still lines up. */
+    var pulledForward = false;
+    if (db.deloadShift && dateISO >= db.deloadShift) {
+      diff += 7;
+      pulledForward = daysBetween(db.deloadShift, dateISO) < 7;
+    }
     var weekIndex = Math.floor(diff / 7);       // 0-based calendar week since start
     var posInMeso = weekIndex % 7;               // 0..6 position within the 7-week meso
     var mesoNumber = Math.floor(weekIndex / 7) + 1;
@@ -1553,6 +1566,7 @@
       mesoNumber: mesoNumber,
       templateWeek: templateWeek,
       isDeload: isDeload,
+      pulledForward: pulledForward && isDeload,
       cycleLabel: cycleLabel
     };
   }
@@ -2261,6 +2275,9 @@
 
       if (info.isDeload) {
         html += '<div class="phase-deload-note">Deload week — cut all working sets roughly 40-50%, moderate effort (stop 2-3 reps short of failure), no dropsets on Failure days. Next Monday restarts Mesocycle ' + (info.mesoNumber + 1) + ', Cycle 1.</div>';
+        if (info.pulledForward) {
+          html += '<div class="phase-deload-note">Deload pulled forward a week for shingles recovery. Skip any exercise where a pad, strap, bar or cable rubs the rash, keep it covered, wipe down equipment, and stay away from pregnant women, babies and immunocompromised people until the blisters have crusted over. Keep eating at your normal level and extend the deload if you are still tired or the rash is active.</div>';
+        }
       }
     }
     if (mesoEditOpen) {
@@ -2348,7 +2365,7 @@
     if (saveBtn) {
       saveBtn.addEventListener('click', function () {
         var val = document.getElementById('meso-date-input').value;
-        if (val) { db.mesoStart = val; save(); }
+        if (val) { db.mesoStart = val; db.deloadShift = null; save(); }
         mesoEditOpen = false;
         renderHome();
         showToast('Cycle start updated');
@@ -2382,6 +2399,7 @@
       db.sessions = {};
       db.nutrition = {};
       db.mesoStart = todayISO();
+      db.deloadShift = null;
       save();
       confirmingReset = false;
       renderHome();
@@ -2461,6 +2479,8 @@
 
     day.ex.forEach(function (row, exIdx) {
       var name = row[0], setCount = row[1], target = row[2];
+      var fullSetCount = setCount;
+      if (isDeload) setCount = Math.max(2, Math.round(fullSetCount * 0.55));
       var log = getExLog(session, name);
       while (log.sets.length < setCount) log.sets.push({ w: '', r: '' });
 
@@ -2482,8 +2502,7 @@
 
       var deloadHtml = '';
       if (isDeload) {
-        var reduced = Math.max(2, Math.round(setCount * 0.55));
-        deloadHtml = '<div class="exercise-deload">Deload week — aim for ~' + reduced + ' sets (down from ' + setCount + '), moderate effort, no dropsets.</div>';
+        deloadHtml = '<div class="exercise-deload">Deload week — ' + setCount + ' sets (down from ' + fullSetCount + '), moderate effort, stop 2-3 reps short of failure, no dropsets.</div>';
       }
 
       var stallInfo = exerciseStallInfo(name);
