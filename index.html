@@ -1090,8 +1090,9 @@
       ['Machine Shoulder Press',4,'Gradual increase — last 2 sets heavy, under 9 reps'],
       ['Panetta Lateral Raise Machine',6,'Push hard, but VERY controlled'],
       ['Cable Rear Delt Crossovers',5,'Push hard, but VERY controlled'],
+      ['Incline Hammer Curl',3,'Brachialis, stretched position — heavy day, low rep, big weights, controlled'],
+      ['Seated Hammer Curl',3,'Brachialis/brachioradialis — heavy day, low rep, big weights'],
       ['Incline Seated Dumbbell Curl',5,'Heavy day — low rep, big weights'],
-      ['Seated Hammer Curl',5,'Heavy day — low rep, big weights'],
       ['V-Bar Tricep Pushdown',4,'Heavy day — low rep, big weights'],
       ['Skullcrushers',4,'Heavy day — low rep, compound triceps mass builder'],
       ['V-Bar Tricep Overhead Extension',3,'Heavy day — low rep, big weights'],
@@ -1101,6 +1102,7 @@
       ['Leg Press Machine',3,'Controlled, moderate-heavy — maintenance volume'],
       ['Leg Extension',3,'Controlled'],
       ['Leg Curl',3,'Controlled'],
+      ['Hip Abductor Machine',3,'Controlled, full range, pause & squeeze at the outer end'],
       ['Calf Raises',3,'Controlled'],
       ['Lateral Raise (Machine or Cable)',3,'Third weekly delt exposure — moderate weight, controlled, chase pump'],
       ['Cable Rear Delt Crossovers',3,'Rear delt + external rotation — controlled, pause & squeeze at contraction'],
@@ -1119,8 +1121,9 @@
       ['Machine Shoulder Press',4,'Moderate weight, push to failure on last set'],
       ['Panetta Lateral Raise Machine',6,'Failure day — push to pure failure, utilize dropsets'],
       ['Cable Rear Delt Crossovers',5,'Failure day — push to pure failure, utilize dropsets'],
+      ['Preacher Hammer Curl',3,'Brachialis, stretched position — failure day, push to pure failure, utilize dropsets'],
+      ['Reverse EZ-Bar Curl',3,'Brachioradialis — failure day, lighter than normal curls, push to failure, dropset on last set'],
       ['Machine Preacher Curl',5,'Failure day — push to pure failure, utilize dropsets'],
-      ['Seated Hammer Curl',5,'Failure day — push to pure failure, utilize dropsets'],
       ['V-Bar Tricep Pushdown',3,'Failure day — push to pure failure, utilize dropsets'],
       ['Skullcrushers',4,'Failure day — dropset on last set'],
       ['V-Bar Tricep Overhead Extension',3,'Failure day — push to pure failure, utilize dropsets'],
@@ -1139,6 +1142,8 @@
       ['Machine Shoulder Press',4,'Moderate weight, controlled, chase pump'],
       ['Panetta Lateral Raise Machine',6,'Pump day — low weight, exhaust the muscle, chase pump'],
       ['Cable Rear Delt Crossovers',5,'Pump day — low weight, exhaust the muscle, chase pump'],
+      ['Incline Hammer Curl',3,'Brachialis, stretched position — moderate weight, controlled, chase pump'],
+      ['Seated Hammer Curl',3,'Brachialis/brachioradialis — moderate weight, controlled, chase pump'],
       ['Incline Seated Dumbbell Curl',5,'Moderate weight, chase pump'],
       ['Machine Preacher Curl',5,'Moderate weight, chase pump'],
       ['V-Bar Tricep Pushdown',4,'Moderate weight, chase pump'],
@@ -1150,6 +1155,7 @@
       ['Leg Press Machine',3,'Controlled, moderate-heavy — maintenance volume'],
       ['Leg Extension',3,'Controlled'],
       ['Leg Curl',3,'Controlled'],
+      ['Hip Abductor Machine',3,'Controlled, full range, pause & squeeze at the outer end'],
       ['Calf Raises',3,'Controlled'],
       ['Lateral Raise (Machine or Cable)',3,'Third weekly delt exposure — moderate weight, controlled, chase pump'],
       ['Cable Rear Delt Crossovers',3,'Rear delt + external rotation — controlled, pause & squeeze at contraction'],
@@ -1168,8 +1174,9 @@
       ['Machine Shoulder Press',4,'Gradual increase — last 2 sets heavy, under 9 reps'],
       ['Panetta Lateral Raise Machine',6,'Heavy day — low rep, big weights, VERY controlled'],
       ['Cable Rear Delt Crossovers',5,'Heavy day — low rep, big weights, VERY controlled'],
+      ['Preacher Hammer Curl',3,'Brachialis, stretched position — heavy day, low rep, big weights, controlled'],
+      ['Reverse EZ-Bar Curl',3,'Brachioradialis — heavy day, lighter than normal curls, strict, no swing'],
       ['Incline Seated Dumbbell Curl',5,'Heavy day — low rep, big weights'],
-      ['Seated Hammer Curl',5,'Heavy day — low rep, big weights'],
       ['V-Bar Tricep Pushdown',4,'Heavy day — low rep, big weights'],
       ['Skullcrushers',4,'Heavy day — low rep, big weights'],
       ['V-Bar Tricep Overhead Extension',3,'Heavy day — low rep, big weights'],
@@ -1272,7 +1279,7 @@
      numbers aren't diluted by press work. */
   var VOLUME_TARGETS = {
     'Chest': 23, 'Back': 23, 'Front Delts': 8, 'Lateral Delts': 15, 'Rear Delts': 13,
-    'Biceps': 20, 'Triceps': 21, 'Traps': 6, 'Legs': 12, 'Abs': 10
+    'Biceps': 15, 'Brachialis': 12, 'Triceps': 21, 'Traps': 6, 'Legs': 15, 'Abs': 10
   };
   var EXERCISE_MUSCLE = {
     'Incline Dumbbell Press': 'Chest',
@@ -1292,13 +1299,17 @@
     'Cable Rear Delt Crossovers': 'Rear Delts',
     'Incline Seated Dumbbell Curl': 'Biceps',
     'Machine Preacher Curl': 'Biceps',
-    'Seated Hammer Curl': 'Biceps',
+    'Seated Hammer Curl': 'Brachialis',
+    'Incline Hammer Curl': 'Brachialis',
+    'Preacher Hammer Curl': 'Brachialis',
+    'Reverse EZ-Bar Curl': 'Brachialis',
     'V-Bar Tricep Pushdown': 'Triceps',
     'Skullcrushers': 'Triceps',
     'V-Bar Tricep Overhead Extension': 'Triceps',
     'Leg Press Machine': 'Legs',
     'Leg Extension': 'Legs',
     'Leg Curl': 'Legs',
+    'Hip Abductor Machine': 'Legs',
     'Calf Raises': 'Legs',
     'Machine Shoulder Press': 'Front Delts',
     'Ab Machine': 'Abs',
@@ -3273,7 +3284,7 @@
 
   function renderVolumeHtml() {
     var data = weeklyVolumeByMuscle();
-    var order = ['Chest', 'Back', 'Front Delts', 'Lateral Delts', 'Rear Delts', 'Biceps', 'Triceps', 'Traps', 'Legs', 'Abs'];
+    var order = ['Chest', 'Back', 'Front Delts', 'Lateral Delts', 'Rear Delts', 'Biceps', 'Brachialis', 'Triceps', 'Traps', 'Legs', 'Abs'];
     var html = '<div class="volume-card"><div class="volume-head">Sets logged this week &middot; ' +
       esc(dateLabel(data.range.start)) + '&ndash;' + esc(dateLabel(data.range.end)) + '</div>';
     order.forEach(function (m) {
@@ -3294,7 +3305,7 @@
   // not just how the current single week happens to look.
   function renderVolumeTrendHtml() {
     var weeks = weeklyVolumeTrend(4);
-    var order = ['Chest', 'Back', 'Front Delts', 'Lateral Delts', 'Rear Delts', 'Biceps', 'Triceps', 'Traps', 'Legs', 'Abs'];
+    var order = ['Chest', 'Back', 'Front Delts', 'Lateral Delts', 'Rear Delts', 'Biceps', 'Brachialis', 'Triceps', 'Traps', 'Legs', 'Abs'];
     var html = '<div class="volume-card"><div class="volume-head">Last 4 weeks &middot; oldest &rarr; newest &middot; sets logged</div>';
     order.forEach(function (m) {
       var target = VOLUME_TARGETS[m];
