@@ -41,6 +41,22 @@
     --font-mono: 'IBM Plex Mono', 'SFMono-Regular', Consolas, monospace;
   }
 
+  /* Cut mode: the whole UI swaps to a blue palette while a cut is running
+     (see isCutMode). Only the colour tokens change — layout is untouched. */
+  :root.cut-mode {
+    --ink: #101620;
+    --surface: #182030;
+    --surface-2: #1f293c;
+    --surface-3: #273349;
+    --border: #2f3d57;
+    --text: #eef3fa;
+    --text-muted: #91a0b8;
+    --text-faint: #64738c;
+    --accent: #3f8fd9;
+    --accent-strong: #62adf5;
+    --accent-ink: #05121f;
+  }
+
   /* Ironwave is dark-themed only, on purpose — it doesn't switch to a light
      palette when the phone's system theme is light. (A light-mode variant
      used to live here and was removed because it was flipping day/meal
@@ -630,6 +646,7 @@
   .exercise-card.is-collapsed .exercise-target,
   .exercise-card.is-collapsed .exercise-suggestion,
   .exercise-card.is-collapsed .exercise-deload,
+  .exercise-card.is-collapsed .exercise-cut,
   .exercise-card.is-collapsed .exercise-stall,
   .exercise-card.is-collapsed .exercise-warn,
   .exercise-card.is-collapsed .set-labels,
@@ -667,6 +684,27 @@
     border-radius: 0.4rem;
     padding: 0.45rem 0.6rem;
   }
+  .exercise-cut {
+    margin-top: 0.5rem;
+    font-size: 0.76rem;
+    line-height: 1.4;
+    color: var(--text);
+    background: var(--surface-3);
+    border-left: 3px solid var(--accent-strong);
+    border-radius: 0.4rem;
+    padding: 0.45rem 0.6rem;
+  }
+  .phase-cut-note {
+    margin-top: 0.6rem;
+    background: var(--surface-3);
+    border: 1px solid var(--accent);
+    border-radius: 0.6rem;
+    padding: 0.6rem 0.7rem;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--text);
+  }
+  .phase-card.is-cut { border-color: var(--accent); }
   .exercise-deload {
     margin-top: 0.5rem;
     font-size: 0.76rem;
@@ -1280,6 +1318,59 @@
     'Chest': 23, 'Back': 23, 'Front Delts': 8, 'Lateral Delts': 15, 'Rear Delts': 13,
     'Biceps': 12, 'Brachialis': 10, 'Triceps': 21, 'Traps': 6, 'Legs': 15, 'Abs': 10
   };
+
+  /* ================= Cut mode =================
+     A 4-week aggressive cut after the 18-week bulk (default: Mon 4 Jan 2027 →
+     Sun 31 Jan 2027, weeks 19-22 counted from the 31 Aug 2026 start). While it
+     runs: weekly sets drop ~30% (CUT_SETS, per exercise), effort and load
+     targets stay exactly as written, the volume tracker uses CUT_VOLUME_TARGETS
+     and the UI turns blue. Compound/priority work is trimmed least; pump-day
+     accessories are trimmed most. Lateral/rear delt top-up on Wednesday is kept
+     whole on purpose (delts are a priority). The mesocycle clock is untouched, so
+     deload weeks still land where they would — the deload takes 55% of the
+     already-cut sets (minimum 2). */
+  var DEFAULT_CUT_START = '2027-01-04';
+  var CUT_DAYS = 28;
+  var CUT_VOLUME_TARGETS = {
+    'Chest': 16, 'Back': 16, 'Front Delts': 6, 'Lateral Delts': 11, 'Rear Delts': 9,
+    'Biceps': 8, 'Brachialis': 7, 'Triceps': 14, 'Traps': 4, 'Legs': 10, 'Abs': 6
+  };
+  var CUT_SETS = {
+    'w1-mon': { 'Incline Dumbbell Press': 4, 'Machine Flat Press': 3, 'Incline Cable Flies': 2, 'V-Bar Lat Pulldown': 3, 'Chest Supported Rows (Row Up)': 4, 'Seated Cable Row, Close Grip (Row Mid)': 2, 'Dumbbell Shrugs': 2 },
+    'w2-mon': { 'Incline Dumbbell Press': 4, 'Machine Flat Press': 3, 'Incline Cable Flies': 2, 'V-Bar Lat Pulldown': 3, 'Chest Supported Rows (Row Up)': 4, 'Seated Cable Row, Close Grip (Row Mid)': 2, 'Dumbbell Shrugs': 2 },
+    'w1-thu': { 'Slight Decline Dumbbell Press': 3, 'Machine Incline Press': 2, 'Incline Cable Flies': 2, 'Seated "Above Head" Rows (Row Down)': 2, 'Nautilus Row': 3, 'Straight-Arm Pulldown': 2, 'Dumbbell Shrugs': 2 },
+    'w2-thu': { 'Slight Decline Dumbbell Press': 3, 'Machine Incline Press': 2, 'Incline Cable Flies': 2, 'Seated "Above Head" Rows (Row Down)': 2, 'Nautilus Row': 3, 'Straight-Arm Pulldown': 2, 'Dumbbell Shrugs': 2 },
+    'w1-tue': { 'Machine Shoulder Press': 3, 'Panetta Lateral Raise Machine': 4, 'Cable Rear Delt Crossovers': 3, 'Incline Hammer Curl': 2, 'Cross-Body Hammer Curl': 2, 'Incline Seated Dumbbell Curl': 4, 'V-Bar Tricep Overhead Extension': 3, 'Skullcrushers': 3, 'V-Bar Tricep Pushdown': 2, 'Ab Machine': 2 },
+    'w2-tue': { 'Machine Shoulder Press': 3, 'Panetta Lateral Raise Machine': 4, 'Cable Rear Delt Crossovers': 3, 'Incline Hammer Curl': 2, 'Cross-Body Hammer Curl': 2, 'Incline Seated Dumbbell Curl': 3, 'V-Bar Tricep Overhead Extension': 3, 'Skullcrushers': 3, 'V-Bar Tricep Pushdown': 2, 'Ab Machine': 2 },
+    'w1-fri': { 'Panetta Lateral Raise Machine': 4, 'Cable Rear Delt Crossovers': 3, 'Machine Shoulder Press': 3, 'Preacher Hammer Curl': 2, 'Reverse EZ-Bar Curl': 2, 'Machine Preacher Curl': 4, 'V-Bar Tricep Overhead Extension': 2, 'Skullcrushers': 2, 'V-Bar Tricep Pushdown': 2, 'Ab Machine': 2 },
+    'w2-fri': { 'Panetta Lateral Raise Machine': 4, 'Cable Rear Delt Crossovers': 3, 'Machine Shoulder Press': 3, 'Preacher Hammer Curl': 3, 'Machine Preacher Curl': 2, 'Incline Seated Dumbbell Curl': 3, 'V-Bar Tricep Overhead Extension': 2, 'Skullcrushers': 2, 'V-Bar Tricep Pushdown': 2, 'Ab Machine': 2 },
+    'w1-wed': { 'Leg Press Machine': 2, 'Leg Extension': 2, 'Leg Curl': 2, 'Hip Abductor Machine': 2, 'Calf Raises': 2, 'Lateral Raise (Machine or Cable)': 3, 'Cable Rear Delt Crossovers': 3, 'Hanging Leg Raise': 2 },
+    'w2-wed': { 'Leg Press Machine': 2, 'Leg Extension': 2, 'Leg Curl': 2, 'Hip Abductor Machine': 2, 'Calf Raises': 2, 'Lateral Raise (Machine or Cable)': 3, 'Cable Rear Delt Crossovers': 3, 'Hanging Leg Raise': 2 }
+  };
+  // Falls back to ~70% (min 2) for any exercise added later that isn't in the table.
+  function cutSetsFor(dayId, name, fullSets) {
+    var t = CUT_SETS[dayId];
+    if (t && t[name] != null) return t[name];
+    return Math.max(2, Math.round(fullSets * 0.7));
+  }
+  function addDaysISO(iso, n) {
+    var d = new Date(iso + 'T00:00:00');
+    d.setDate(d.getDate() + n);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function cutStartISO() { return db.cutStart || DEFAULT_CUT_START; }
+  function isCutMode(dateISO) {
+    if (db.cutPreview) return true;
+    var diff = daysBetween(cutStartISO(), dateISO);
+    return diff >= 0 && diff < CUT_DAYS;
+  }
+  function activeVolumeTargets() { return isCutMode(todayISO()) ? CUT_VOLUME_TARGETS : VOLUME_TARGETS; }
+  function applyCutTheme() {
+    var on = isCutMode(todayISO());
+    document.documentElement.classList.toggle('cut-mode', on);
+    var m = document.querySelector('meta[name="theme-color"]');
+    if (m) m.setAttribute('content', on ? '#101620' : '#17151c');
+  }
   var EXERCISE_MUSCLE = {
     'Incline Dumbbell Press': 'Chest',
     'Machine Flat Press': 'Chest',
@@ -2231,6 +2322,7 @@
   }
 
   function render() {
+    applyCutTheme();
     renderInjectionBanner();
     if (screen === 'home') { screenLabel.textContent = 'Program'; renderHome(); }
     else if (screen === 'workout') { screenLabel.textContent = 'Workout'; renderWorkout(); }
@@ -2266,7 +2358,8 @@
   function chipClass(type) { return 'chip chip-' + type; }
 
   function renderPhaseCard(info) {
-    var html = '<div class="phase-card' + (info.started && info.isDeload ? ' is-deload' : '') + '">';
+    var cutOn = isCutMode(todayISO());
+    var html = '<div class="phase-card' + (info.started && info.isDeload ? ' is-deload' : '') + (cutOn ? ' is-cut' : '') + '">';
     if (!info.started) {
       html += '<div class="phase-row"><span class="phase-label">Mesocycle starts</span>' +
         '<span class="phase-value">' + esc(dateLabel(db.mesoStart)) + '</span></div>' +
@@ -2291,15 +2384,31 @@
         }
       }
     }
+    var cutStart = cutStartISO();
+    var cutLast = addDaysISO(cutStart, CUT_DAYS - 1);
+    var cutValue = db.cutPreview ? 'Preview on'
+      : cutOn ? 'Active &middot; until ' + esc(dateLabel(cutLast))
+      : todayISO() < cutStart ? 'Starts ' + esc(dateLabel(cutStart))
+      : 'Finished';
+    html += '<div class="phase-row" style="margin-top:0.5rem"><span class="phase-label">Cut mode</span>' +
+      '<span class="phase-value">' + cutValue + '</span></div>';
+    if (cutOn) {
+      html += '<div class="phase-cut-note">Cut mode — weekly sets are down about 30% and the UI is blue. Effort and loads stay exactly as written: fewer sets, not easier ones. ' +
+        'Cardio goes up: 30-40 min low-intensity walk after every session, plus 30-45 min on rest days; add it gradually if weight loss runs under target. ' +
+        'The Diet tab still shows the bulk meal plan until you set cut calories.</div>';
+    }
     if (mesoEditOpen) {
       html += '<div class="phase-edit-form">' +
         '<label for="meso-date-input">Cycle start</label>' +
         '<input type="date" id="meso-date-input" value="' + esc(db.mesoStart) + '">' +
+        '<label for="cut-date-input">Cut start</label>' +
+        '<input type="date" id="cut-date-input" value="' + esc(cutStart) + '">' +
         '<button id="meso-save-btn">Save</button>' +
         '<button class="cancel-link" id="meso-cancel-btn">Cancel</button>' +
         '</div>';
     } else {
-      html += '<button class="phase-edit-btn" id="meso-edit-btn">Edit cycle start date</button>';
+      html += '<button class="phase-edit-btn" id="meso-edit-btn">Edit cycle &amp; cut start dates</button>' +
+        ' <button class="phase-edit-btn" id="cut-preview-btn">' + (db.cutPreview ? 'Stop previewing cut mode' : 'Preview cut mode') + '</button>';
     }
     html += '</div>';
     return html;
@@ -2372,14 +2481,28 @@
         renderHome();
       });
     }
+    var cutPreviewBtn = document.getElementById('cut-preview-btn');
+    if (cutPreviewBtn) {
+      cutPreviewBtn.addEventListener('click', function () {
+        db.cutPreview = !db.cutPreview;
+        save();
+        applyCutTheme();
+        renderHome();
+        showToast(db.cutPreview ? 'Cut mode preview on' : 'Cut mode preview off');
+      });
+    }
     var saveBtn = document.getElementById('meso-save-btn');
     if (saveBtn) {
       saveBtn.addEventListener('click', function () {
         var val = document.getElementById('meso-date-input').value;
-        if (val) { db.mesoStart = val; db.deloadShift = null; save(); }
+        var cutVal = document.getElementById('cut-date-input').value;
+        if (val && val !== db.mesoStart) { db.mesoStart = val; db.deloadShift = null; }
+        if (cutVal) db.cutStart = cutVal;
+        save();
         mesoEditOpen = false;
+        applyCutTheme();
         renderHome();
-        showToast('Cycle start updated');
+        showToast('Dates updated');
       });
     }
     var cancelBtn = document.getElementById('meso-cancel-btn');
@@ -2411,7 +2534,10 @@
       db.nutrition = {};
       db.mesoStart = todayISO();
       db.deloadShift = null;
+      db.cutStart = null;
+      db.cutPreview = false;
       save();
+      applyCutTheme();
       confirmingReset = false;
       renderHome();
       showToast('All data cleared — cycle clock restarted today');
@@ -2487,11 +2613,14 @@
 
     var mesoInfo = getMesoInfo(dateISO);
     var isDeload = mesoInfo.started && mesoInfo.isDeload;
+    var cutOn = isCutMode(dateISO);
 
     day.ex.forEach(function (row, exIdx) {
       var name = row[0], setCount = row[1], target = row[2];
       var fullSetCount = setCount;
-      if (isDeload) setCount = Math.max(2, Math.round(fullSetCount * 0.55));
+      if (cutOn) setCount = cutSetsFor(dayId, name, fullSetCount);
+      var cutSetCount = setCount;
+      if (isDeload) setCount = Math.max(2, Math.round(cutSetCount * 0.55));
       var log = getExLog(session, name);
       while (log.sets.length < setCount) log.sets.push({ w: '', r: '' });
 
@@ -2513,7 +2642,9 @@
 
       var deloadHtml = '';
       if (isDeload) {
-        deloadHtml = '<div class="exercise-deload">Deload week — ' + setCount + ' sets (down from ' + fullSetCount + '), moderate effort, stop 2-3 reps short of failure, no dropsets.</div>';
+        deloadHtml = '<div class="exercise-deload">Deload week — ' + setCount + ' sets (down from ' + cutSetCount + '), moderate effort, stop 2-3 reps short of failure, no dropsets.</div>';
+      } else if (cutOn) {
+        deloadHtml = '<div class="exercise-cut">Cut mode — ' + setCount + ' sets (down from ' + fullSetCount + '). Same effort and loads as written: fewer sets, not easier ones.</div>';
       }
 
       var stallInfo = exerciseStallInfo(name);
@@ -3289,7 +3420,7 @@
       esc(dateLabel(data.range.start)) + '&ndash;' + esc(dateLabel(data.range.end)) + '</div>';
     order.forEach(function (m) {
       var cur = data.totals[m] || 0;
-      var target = VOLUME_TARGETS[m];
+      var target = activeVolumeTargets()[m];
       var pct = Math.max(0, Math.min(100, Math.round((cur / target) * 100)));
       html += '<div class="volume-row">' +
         '<span class="volume-label">' + esc(m) + '</span>' +
@@ -3308,7 +3439,7 @@
     var order = ['Chest', 'Back', 'Front Delts', 'Lateral Delts', 'Rear Delts', 'Biceps', 'Brachialis', 'Triceps', 'Traps', 'Legs', 'Abs'];
     var html = '<div class="volume-card"><div class="volume-head">Last 4 weeks &middot; oldest &rarr; newest &middot; sets logged</div>';
     order.forEach(function (m) {
-      var target = VOLUME_TARGETS[m];
+      var target = activeVolumeTargets()[m];
       html += '<div class="trend-row"><span class="trend-label">' + esc(m) + '</span><div class="trend-weeks">' +
         weeks.map(function (w) {
           var cur = w.totals[m] || 0;
